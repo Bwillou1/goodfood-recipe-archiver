@@ -1,16 +1,8 @@
 """Connexion RÉELLE à Goodfood avec identifiants (email + mot de passe).
 
-Contrairement à une simple réutilisation de cookie (qui oblige l'humain à
-exporter sa session depuis son navigateur), ce module fait un **vrai login** :
-il remplit le formulaire de connexion avec les identifiants fournis, puis
-soumet réellement la requête au site.
-
-Une fois connecté, la session est sauvegardée (cookies/storage_state.json)
-et réutilisée tant qu'elle reste valide ; sinon on se reconnecte automatiquement.
-
-Les identifiants viennent du fichier `.env` (voir `.env.example`) :
-    GOODFOOD_EMAIL=ton@email.com
-    GOODFOOD_PASSWORD=ton_mot_de_passe
+Sécurité garantie :
+- Les garde-fous de sécurité sont activés pour bloquer toute tentative d'accès
+  à des URLs de paiement, de panier, ou de modification de commande.
 """
 from __future__ import annotations
 
@@ -21,6 +13,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext
 
+from .guardrails import apply_guardrails
 from .utils import ensure_dirs, get_credentials, load_config, storage_state_path
 
 # Sélecteurs par défaut — surchargés par config/config.yaml (login_selectors)
@@ -92,6 +85,7 @@ def login_with_credentials(email: str, password: str, headless: bool = True):
         locale="fr-CA",
     )
     page = context.new_page()
+    apply_guardrails(page)
 
     try:
         page.goto(login_url, wait_until="domcontentloaded",
@@ -140,7 +134,6 @@ def login_with_credentials(email: str, password: str, headless: bool = True):
         still_logged_out = _first_visible(page, sel["logged_out"]) is not None
         on_login_page = "login" in page.url.lower() or "signin" in page.url.lower()
         if still_logged_out and on_login_page:
-            # Cherche un éventuel message d'erreur
             error = page.locator("[class*='error'], [role='alert']").first
             msg = error.inner_text().strip() if error.count() > 0 else "identifiants refusés ?"
             raise RuntimeError(f"Échec de connexion ({msg}). Vérifie GOODFOOD_EMAIL / GOODFOOD_PASSWORD.")
@@ -167,6 +160,7 @@ def save_session_manual(headless: bool = False) -> Path:
         browser = p.chromium.launch(headless=headless)
         context = browser.new_context()
         page = context.new_page()
+        apply_guardrails(page)
         page.goto(login_url)
         print(f"\n🔐 Navigateur ouvert sur {login_url}")
         print("   Connecte-toi à la main, puis reviens ici et appuie sur Entrée.\n")
@@ -198,6 +192,7 @@ def is_logged_in(context, base_url: str) -> bool:
     cfg = load_config()
     sel = _selectors(cfg)
     page = context.new_page()
+    apply_guardrails(page)
     try:
         page.goto(base_url, wait_until="domcontentloaded",
                   timeout=cfg["goodfood"]["timeout_ms"])

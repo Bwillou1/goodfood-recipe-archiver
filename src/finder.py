@@ -1,11 +1,8 @@
 """Recherche des recettes sur Goodfood à partir des noms de plats.
 
-Pour chaque plat de data/meals.json :
-  1. parcourt les menus hebdomadaires disponibles sur Goodfood ;
-  2. matche le nom (fuzzy matching rapidfuzz) avec les recettes du catalogue ;
-  3. extrait titre, description, image HD, ingrédients et étapes détaillées.
-
-Sortie : data/recipes.json
+Sécurité garantie :
+- Les garde-fous de sécurité sont activés en mode Strict Read-Only.
+- Aucune interaction de panier, d'achat ou d'accès bancaire n'est permise.
 """
 from __future__ import annotations
 
@@ -18,6 +15,7 @@ from typing import Optional
 from rapidfuzz import fuzz
 
 from .auth import ensure_session
+from .guardrails import apply_guardrails
 from .utils import (
     DATA_DIR, RECIPES_DIR, ensure_dirs, load_config, normalize,
 )
@@ -38,11 +36,8 @@ def best_match(query: str, candidates: list[tuple[str, str]]) -> Optional[tuple[
     best: Optional[tuple[str, str, float]] = None
     for title, url in candidates:
         norm_title = normalize(title)
-        # Ratio complet
         score = fuzz.ratio(q, norm_title) / 100.0
-        # Ratio partiel
         partial = fuzz.partial_ratio(q, norm_title) / 100.0
-        # Token sort ratio (utile pour 'saumon teriyaki' vs 'saumon au teriyaki')
         token_score = fuzz.token_set_ratio(q, norm_title) / 100.0
         
         combined_score = max(score, partial * 0.9, token_score)
@@ -125,7 +120,6 @@ def collect_all_candidates(page, base_recipes_url: str) -> list[tuple[str, str]]
 
     candidates_dict: dict[str, str] = {}
 
-    # Trouve les sélecteurs de semaines (ex: août 30, sept 6, etc.)
     date_tabs = page.locator('div[class*="min-w-[92px]"], div[class*="week"], div[class*="Date"]').all()
     num_weeks = max(1, len(date_tabs))
 
@@ -139,7 +133,6 @@ def collect_all_candidates(page, base_recipes_url: str) -> list[tuple[str, str]]
                 tab.click()
                 time.sleep(1.5)
 
-            # Clique sur 'Toutes les recettes'
             toutes = page.locator(':text("Toutes les recettes"), :text("All Recipes")').first
             if toutes.count() > 0:
                 try:
@@ -148,12 +141,10 @@ def collect_all_candidates(page, base_recipes_url: str) -> list[tuple[str, str]]
                 except Exception:
                     pass
 
-            # Scroll pour déclencher le lazy-loading
             for _ in range(4):
                 page.mouse.wheel(0, 2500)
                 time.sleep(0.4)
 
-            # Récupère tous les liens de recettes
             links = page.locator('a[href*="/recipe/"], a[href*="/product/recipe/"]').all()
             for l in links:
                 t = (l.inner_text() or l.get_attribute("title") or l.get_attribute("aria-label") or "").strip()
@@ -176,6 +167,7 @@ def run(dump: bool = False, headless: bool = True) -> Path:
 
     pw, context = ensure_session(headless=headless)
     page = context.new_page()
+    apply_guardrails(page)
     recipes: list[dict] = []
     missing: list[str] = []
 
