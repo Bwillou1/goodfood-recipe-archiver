@@ -1,70 +1,76 @@
 # Goodfood Recipe Archiver 📄➡️📚
 
-> Récupère tes recettes Goodfood achetées et les compile en **un seul PDF final**.
-> **Piloté par IA** : tu donnes juste l'URL du repo à Claude/Mistral, l'agent fait tout.
+> **Récupère tes vraies fiches recettes Goodfood et les compile en un livre PDF complet.**
+> **100% Autonome & Piloté par IA** : tu donnes juste le prompt ci-dessous à Claude / Mistral / ChatGPT, l'IA s'occupe de tout et te livre le PDF final.
 
-Goodfood n'envoie plus les recettes sur papier : elles vivent dans ton compte en ligne.
-Ce projet les archive automatiquement, **sans que tu aies rien à installer ni coder**.
+---
 
-```
-🔐 Connexion RÉELLE (email + mot de passe)
-        ▼
-🧾 Lecture de la facture (OCR)
-        ▼
-🔎 Recherche de chaque plat sur le site
-        ▼
-📄 1 PDF par recette
-        ▼
-📚 Assemblage → Goodfood_recettes.pdf
+## 🚀 LE PROMPT À COPIER-COLLER DANS TON IA (Claude, Mistral, ChatGPT)
+
+Sur ton **iPhone, iPad ou Ordinateur**, ouvre ton IA et colle simplement ce message en **joignant la photo de ta facture** :
+
+```text
+Agis en tant qu'agent autonome. Ton but est de récupérer mes vraies fiches recettes Goodfood et de me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+
+🔗 REPO GITHUB : https://github.com/TON_PSEUDO/goodfood-recipe-archiver.git
+📧 COURRIEL GOODFOOD : mon_email@exemple.com
+🔑 MOT DE PASSE : MonMotDePasse123!
+🧾 FACTURE : Voir la capture d'écran ci-jointe.
+
+📋 DIRECTIVES D'EXÉCUTION AUTONOME (Ne me pose aucune question technique, fais tout de A à Z) :
+1. Lis l'image de ma facture attachée pour extraire automatiquement les noms de mes plats commandés.
+2. Clone le dépôt GitHub, installe les dépendances (pip install -r requirements.txt && playwright install chromium).
+3. Crée le fichier .env avec mes identifiants ci-dessus.
+4. Lance l'exécution complète avec la commande : python run.py
+5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable dans notre discussion.
 ```
 
 ---
 
-## 🤖 Mode « agent IA » (recommandé — marche depuis ton iPhone)
+## 🎯 Comment ça marche ?
 
-Tu n'as **rien à faire** sur ta machine. Depuis ton iPhone, dans Claude / Mistral / etc. :
-
-1. **Colle l'URL de ce dépôt GitHub** et dis :
-   > « Fais tourner ce projet : récupère mes recettes Goodfood et donne-moi le PDF final. »
-2. Quand l'agent te le demande, donne-lui **ton email + mot de passe Goodfood** (une fois),
-   et la **capture d'écran de ta facture**.
-3. L'agent lit `AGENTS.md`, installe tout, se connecte **réellement** à ton compte,
-   retrouve tes recettes, et te rend `Goodfood_recettes.pdf`.
-
-Tout est **réel** : vraie connexion par identifiants (pas de cookie partagé),
-vraies données du site, vrais PDF. Rien n'est simulé.
+```
+🧾 1. Photo de la facture (OCR visuel par l'IA)
+        ▼
+🔐 2. Connexion RÉELLE et sécurisée au compte Goodfood
+        ▼
+🔎 3. Détection des fiches officielles 2 pages (Marché Goodfood)
+        ▼
+🖨️ 4. Impression HD fidèle (Page 1: Ingrédients / Page 2: 6 étapes illustrées)
+        ▼
+📚 5. Assemblage avec page de garde → Goodfood_recettes.pdf
+```
 
 ---
 
-## 🖥️ Mode « classique » (sur un ordi)
+## 🛡️ Sécurité & Garde-Fous (Anti-Achat Garantis)
+
+Le code intègre un système d'interception réseau hermétique (`src/guardrails.py`) :
+- **Strict Read-Only** : Toutes les requêtes vers `/checkout`, `/cart`, `/panier`, `/payment`, `/wallet`, `/orders/cancel` sont interceptées et bloquées immédiatement (`blockedbyclient`).
+- **Aucune altération possible** : Aucune commande ne peut être passée, modifiée ou annulée.
+- **Confidentialité** : Les identifiants restent cantonnés au fichier local `.env` (ignoré par Git).
+
+---
+
+## 🖥️ Utilisation Manuelle en Ligne de Commande (Optionnel)
+
+Si tu souhaites exécuter le projet toi-même sur ton ordinateur :
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows : .venv\Scripts\activate
+# 1. Installation
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
-```
 
-### 1. Identifiants
-
-```bash
+# 2. Configuration (.env)
 cp .env.example .env
-# édite .env : GOODFOOD_EMAIL / GOODFOOD_PASSWORD
+# Édite .env avec ton email et mot de passe Goodfood
+
+# 3. Lancer le pipeline complet
+python run.py
 ```
 
-### 2. Tout lancer
-
-```bash
-python run.py                       # lit la 1ère facture de data/receipts/
-# ou, étape par étape :
-python -m src.cli auth              # connexion réelle + session sauvegardée
-python -m src.cli extract --image data/receipts/ma_facture.png
-python -m src.cli extract --list "Poulet au beurre" "Saumon teriyaki"   # alternative sans OCR
-python -m src.cli find              # retrouve les recettes
-python -m src.cli build             # 1 PDF par recette
-python -m src.cli assemble          # PDF final
-```
-
-### Démo sans compte (valider le rendu)
+### 🧪 Tester sans compte (Mode Démo)
 
 ```bash
 python -m src.cli demo
@@ -72,43 +78,33 @@ python -m src.cli demo
 
 ---
 
-## 📁 Structure
+## 📁 Structure du Projet
 
 ```
 goodfood-recipe-archiver/
-├── AGENTS.md               # ⭐ instructions pour l'agent IA
-├── run.py                  # point d'entrée unique (1 commande)
-├── README.md
-├── requirements.txt
-├── .env.example            # → copier en .env (identifiants, non committé)
-├── config/config.yaml      # URLs + sélecteurs (login, recettes)
+├── README.md               # 📖 Documentation & Prompt clé en main
+├── MASTER_PROMPT.md        # 📋 Le Master Prompt prêt à l'emploi
+├── AGENTS.md               # 🤖 Instructions pour les agents IA
+├── index.html              # 🌐 Page web de présentation avec bouton 1-clic
+├── run.py                  # 🚀 Point d'entrée unique autonome
+├── requirements.txt        # 📦 Dépendances Python
+├── config/config.yaml      # ⚙️ Configuration & Sélecteurs
 ├── src/
-│   ├── cli.py              # commandes détaillées
-│   ├── auth.py             # connexion RÉELLE par identifiants
-│   ├── ocr_receipt.py      # lecture de la facture (OCR)
-│   ├── finder.py           # recherche des recettes (match flou)
-│   ├── pdf_builder.py      # 1 PDF par recette
-│   ├── assembler.py        # fusion en PDF final
-│   └── demo.py             # PDF d'exemple (sans compte)
+│   ├── auth.py             # Connexion sécurisée
+│   ├── guardrails.py       # Garde-fous réseau stricts & anti-achat
+│   ├── ocr_receipt.py      # Extraction des noms de plats
+│   ├── finder.py           # Recherche des fiches officielles Goodfood
+│   ├── pdf_builder.py      # Impression fidèle 2 pages HD
+│   └── assembler.py        # Fusion finale du livre de recettes
 └── data/
-    ├── receipts/           # captures de facture
-    ├── recipes/            # PDF individuels
-    └── output/             # PDF final
+    ├── receipts/           # Captures de facture
+    ├── recipes/            # Fiches PDF individuelles
+    └── output/             # Livre PDF final (Goodfood_recettes.pdf)
 ```
 
 ---
 
-## ⚙️ Personnalisation
-
-URLs et sélecteurs dans `config/config.yaml`. Si Goodfood change son HTML :
-- connexion : `login_selectors`
-- recettes : `selectors`
-- diagnostic : `python -m src.cli find --dump` (sauvegarde le HTML de la page).
-
 ## ⚠️ Avertissements
 
-- Usage **personnel uniquement** (ton propre compte).
-- Respecte les CGU de Goodfood ; le script intègre des délais entre requêtes.
-- Ne committe jamais `.env` ni `cookies/` (déjà dans `.gitignore`).
-- La connexion automatique peut être bloquée par un CAPTCHA : dans ce cas,
-  utilise `python -m src.cli auth --manual` une fois.
+- Usage **personnel uniquement** (votre propre compte Goodfood).
+- Ne committez jamais votre fichier `.env` sur GitHub (déjà protégé par le `.gitignore`).

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Goodfood Recipe Archiver — Fiches Recettes Officielles en PDF</title>
+  <style>
+    :root {
+      --primary: #00838D;
+      --primary-dark: #006066;
+      --primary-light: #E0F2F1;
+      --accent: #E22128;
+      --text: #2D3748;
+      --bg: #F7FAFC;
+      --card-bg: #FFFFFF;
+      --border: #E2E8F0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px 16px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .logo-badge {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      font-weight: 800;
+      font-size: 14px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--primary-dark);
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      font-size: 16px;
+      color: #718096;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .copy-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--primary-dark);
+    }
+
+    .copy-btn.copied {
+      background: #38A169;
+    }
+
+    pre {
+      background: #1A202C;
+      color: #EDF2F7;
+      padding: 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+      font-size: 13.5px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .step-box {
+      background: var(--primary-light);
+      padding: 16px;
+      border-radius: 12px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .step-number {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--primary-dark);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .step-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .badge-secure {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #DEF7EC;
+      color: #03543F;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: #A0AEC0;
+      margin-top: 32px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="logo-badge">Marché Goodfood Archiver</div>
+      <h1>Tes Recettes Goodfood en un seul PDF</h1>
+      <p class="subtitle">100% Autonome — Donne ce prompt à Claude, Mistral ou ChatGPT et reçois ton PDF.</p>
+    </header>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📋 Le Seul Prompt à Copier-Coller</div>
+        <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span id="copyBtnText">Copier le Prompt</span>
+        </button>
+      </div>
+
+      <pre id="promptText">Agis en tant qu'agent autonome. Ton but est de récupérer mes vraies fiches recettes Goodfood et de me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+
+🔗 REPO GITHUB : https://github.com/TON_PSEUDO/goodfood-recipe-archiver.git
+📧 COURRIEL GOODFOOD : mon_email@exemple.com
+🔑 MOT DE PASSE : MonMotDePasse123!
+🧾 FACTURE : Voir la capture d'écran ci-jointe.
+
+📋 DIRECTIVES D'EXÉCUTION AUTONOME (Ne me pose aucune question technique, fais tout de A à Z) :
+1. Lis l'image de ma facture attachée pour extraire automatiquement les noms de mes plats commandés.
+2. Clone le dépôt GitHub, installe les dépendances (pip install -r requirements.txt && playwright install chromium).
+3. Crée le fichier .env avec mes identifiants ci-dessus.
+4. Lance l'exécution complète avec la commande : python run.py
+5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable dans notre discussion.</pre>
+
+      <div class="badge-secure">
+        🔒 <b>Sécurité Garantie</b> : Mode Strict Read-Only avec blocage automatique de tout achat, panier ou modification de compte.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📱 Comment ça fonctionne sur iPhone & Ordinateur ?</div>
+      <div class="steps-grid">
+        <div class="step-box">
+          <div class="step-number">Étape 1</div>
+          <div class="step-text">Prends une capture d'écran de ta facture Goodfood.</div>
+        </div>
+        <div class="step-box">
+          <div class="step-number">Étape 2</div>
+          <div class="step-text">Colle le prompt ci-dessus dans ton IA préférée (Claude, Mistral, ChatGPT).</div>
+        </div>
+        <div class="step-box">
+          <div class="step-number">Étape 3</div>
+          <div class="step-text">Reçois directement ton livre de recettes PDF officiel assemblé en 20 secondes !</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Goodfood Recipe Archiver — Pour usage personnel uniquement.
+    </footer>
+  </div>
+
+  <script>
+    function copyPrompt() {
+      const text = document.getElementById("promptText").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("copyBtn");
+        const btnText = document.getElementById("copyBtnText");
+        btn.classList.add("copied");
+        btnText.innerText = "Copié !";
+        setTimeout(() => {
+          btn.classList.remove("copied");
+          btnText.innerText = "Copier le Prompt";
+        }, 2500);
+      });
+    }
+  </script>
+</body>
+</html>
