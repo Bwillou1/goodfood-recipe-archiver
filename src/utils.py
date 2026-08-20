@@ -52,6 +52,8 @@ def normalize(text: str) -> str:
     """Normalise un texte pour comparaison : minuscules, sans accents, sans ponctuation."""
     if not text:
         return ""
+    # Remplacer les ligatures courantes
+    text = text.replace("œ", "oe").replace("Œ", "oe").replace("æ", "ae").replace("Æ", "ae")
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
     text = text.lower()
@@ -72,4 +74,4 @@ def sanitize_latin1(text: str) -> str:
     }
     for k, v in replacements.items():
         text = text.replace(k, v)
-    return text.encode("latin-1", "replace").decode("latin-1")
+    return text.encode("latin-1", "ignore").decode("latin-1").strip()

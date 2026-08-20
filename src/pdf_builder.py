@@ -28,17 +28,17 @@ def _styles() -> dict:
     base = getSampleStyleSheet()
     title = ParagraphStyle(
         "TitleFr", parent=base["Title"], fontName="Helvetica-Bold",
-        fontSize=22, leading=26, textColor=DARK, spaceAfter=6 * mm,
+        fontSize=20, leading=24, textColor=DARK, spaceAfter=5 * mm,
         alignment=TA_CENTER,
     )
     h2 = ParagraphStyle(
         "H2", parent=base["Heading2"], fontName="Helvetica-Bold",
-        fontSize=14, leading=18, textColor=ACCENT, spaceBefore=8 * mm,
+        fontSize=13, leading=17, textColor=ACCENT, spaceBefore=6 * mm,
         spaceAfter=3 * mm,
     )
     body = ParagraphStyle(
         "Body", parent=base["BodyText"], fontName="Helvetica",
-        fontSize=10.5, leading=15, textColor=DARK, alignment=TA_JUSTIFY,
+        fontSize=10, leading=14, textColor=DARK, alignment=TA_JUSTIFY,
     )
     return {"title": title, "h2": h2, "body": body}
 
@@ -51,8 +51,8 @@ def _fetch_image(url: str) -> Optional[Image]:
         r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
         r.raise_for_status()
         img = Image(io.BytesIO(r.content))
-        img.drawWidth = 160 * mm
-        img.drawHeight = 90 * mm
+        img.drawWidth = 150 * mm
+        img.drawHeight = 85 * mm
         return img
     except Exception:  # noqa: BLE001
         return None
@@ -62,19 +62,19 @@ def build_recipe_pdf(recipe: dict, out_path: Path) -> None:
     st = _styles()
     doc = SimpleDocTemplate(
         str(out_path), pagesize=A4,
-        leftMargin=20 * mm, rightMargin=20 * mm,
-        topMargin=18 * mm, bottomMargin=18 * mm,
+        leftMargin=18 * mm, rightMargin=18 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
         title=sanitize_latin1(recipe.get("title", "Recette")),
     )
     story = []
 
     story.append(Paragraph(sanitize_latin1(recipe.get("title", "Recette")), st["title"]))
-    story.append(HRFlowable(width="100%", thickness=1.2, color=ACCENT, spaceAfter=6 * mm))
+    story.append(HRFlowable(width="100%", thickness=1.2, color=ACCENT, spaceAfter=5 * mm))
 
     img = _fetch_image(recipe.get("image", ""))
     if img:
         story.append(img)
-        story.append(Spacer(1, 6 * mm))
+        story.append(Spacer(1, 5 * mm))
 
     if recipe.get("description"):
         story.append(Paragraph(sanitize_latin1(recipe["description"]), st["body"]))
@@ -115,9 +115,10 @@ def run() -> Path:
         return RECIPES_DIR
 
     created = []
-    for r in recipes:
-        slug = r.get("matched_meal") or r.get("title") or "recette"
+    for i, r in enumerate(recipes, 1):
+        slug = r.get("matched_meal") or r.get("title") or f"recette_{i}"
         fname = "".join(c for c in slug if c.isalnum() or c in " -_").strip().replace(" ", "_")[:60]
+        fname = fname or f"recette_{i}"
         out = RECIPES_DIR / f"{fname}.pdf"
         build_recipe_pdf(r, out)
         created.append(out)

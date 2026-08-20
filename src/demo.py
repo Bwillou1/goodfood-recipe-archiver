@@ -66,3 +66,7 @@ def run_demo() -> Path:
     final = assembler.run()
     print(f"\n✅ Démo terminée → {final}")
     return final
+
+
+# Alias pour cohérence avec les autres modules
+run = run_demo

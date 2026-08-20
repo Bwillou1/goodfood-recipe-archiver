@@ -2,7 +2,7 @@
 
 Deux modes :
   - OCR (Tesseract) sur une image de facture ;
-  - liste manuelle passée en argument.
+  - liste manuelle passée en argument ou générée par la vision de l'agent IA.
 
 Sortie : data/meals.json  →  {"meals": ["Poulet au beurre", ...]}
 """
@@ -31,24 +31,33 @@ def ocr_image(image_path: str | Path, lang: Optional[str] = None) -> str:
     from PIL import Image
 
     if lang is None:
-        lang = load_config()["ocr"]["lang"]
+        lang = load_config().get("ocr", {}).get("lang", "fra")
 
     img = Image.open(image_path)
-    text = pytesseract.image_to_string(img, lang=lang)
-    return text
+    try:
+        text = pytesseract.image_to_string(img, lang=lang)
+        return text
+    except pytesseract.TesseractNotFoundError:
+        raise RuntimeError(
+            "Tesseract OCR n'est pas installé dans l'environnement système.\n"
+            "Pour l'installer :\n"
+            "  - Debian / Ubuntu : apt-get install -y tesseract-ocr tesseract-ocr-fra\n"
+            "  - macOS           : brew install tesseract tesseract-lang\n"
+            "Astuce : vous pouvez aussi passer les plats directement avec --list ou laisser l'IA vision remplir data/meals.json."
+        )
 
 
 def extract_meal_names(raw_text: str) -> list[str]:
     """Transforme le texte OCR brut en liste de plats plausibles.
 
-    Heuristique simple : les noms de plats sont des lignes qui ressemblent à des
+    Heuristique : les noms de plats sont des lignes qui ressemblent à des
     titres (pas de prix, pas de mot-clé de facture, longueur raisonnable).
     """
     lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
     meals: list[str] = []
     for ln in lines:
         # Ignore les lignes trop courtes/longues
-        if not (4 <= len(ln) <= 60):
+        if not (4 <= len(ln) <= 70):
             continue
         lower = ln.lower()
         # Ignore les lignes contenant un prix ou du bruit de facture
@@ -59,7 +68,7 @@ def extract_meal_names(raw_text: str) -> list[str]:
         if any(w in lower for w in NOISE_WORDS):
             continue
         # Un nom de plat plausible : majoritairement des lettres/espaces
-        if sum(c.isalpha() or c.isspace() for c in ln) / len(ln) > 0.7:
+        if sum(c.isalpha() or c.isspace() for c in ln) / len(ln) > 0.65:
             meals.append(ln)
     # Déduplique en gardant l'ordre
     seen: set[str] = set()
