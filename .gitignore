@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Session / secrets — NE JAMAIS committer
+cookies/*
+!cookies/.gitkeep
+.env
+
+# Données générées & captures
+data/receipts/*
+!data/receipts/.gitkeep
+data/recipes/*
+!data/recipes/.gitkeep
+data/output/*
+!data/output/.gitkeep
+data/meals.json
+data/recipes.json
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

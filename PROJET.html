@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goodfood Recipe Archiver — Guide complet</title>
+<style>
+  :root {
+    --vert: #2E7D32;
+    --vert-clair: #E8F5E9;
+    --vert-fonce: #1B5E20;
+    --sombre: #1B1B1B;
+    --gris: #5A5A5A;
+    --fond: #F7F9F7;
+    --blanc: #FFFFFF;
+    --bord: #E0E6E0;
+    --orange: #E65100;
+    --bleu: #1565C0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--sombre);
+    background: var(--fond);
+    line-height: 1.6;
+  }
+  .hero {
+    background: linear-gradient(135deg, var(--vert-fonce) 0%, var(--vert) 60%, #43A047 100%);
+    color: #fff;
+    padding: 64px 24px 56px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 2.4rem; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .hero .tagline { font-size: 1.15rem; opacity: 0.95; max-width: 640px; margin: 0 auto; }
+  .hero .badge {
+    display: inline-block; background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.35);
+    padding: 6px 16px; border-radius: 999px; font-size: 0.85rem;
+    margin-top: 20px; letter-spacing: 0.3px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px 72px; }
+  section { margin-top: 48px; }
+  h2 {
+    font-size: 1.5rem; margin-bottom: 18px; padding-bottom: 10px;
+    border-bottom: 3px solid var(--vert-clair);
+  }
+  h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; background: var(--vert); color: #fff;
+    border-radius: 8px; font-size: 1rem; margin-right: 12px; vertical-align: -6px;
+  }
+  h3 { font-size: 1.1rem; margin: 22px 0 8px; color: var(--vert-fonce); }
+  p { margin-bottom: 12px; color: var(--gris); }
+  .card {
+    background: var(--blanc); border: 1px solid var(--bord); border-radius: 14px;
+    padding: 22px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .pipeline { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+  .step {
+    flex: 1 1 140px; background: var(--blanc); border: 1px solid var(--bord);
+    border-radius: 12px; padding: 16px 14px; text-align: center;
+  }
+  .step .ico { font-size: 1.7rem; display: block; margin-bottom: 6px; }
+  .step .lbl { font-size: 0.85rem; font-weight: 600; }
+  .arrow { align-self: center; color: var(--vert); font-weight: bold; font-size: 1.2rem; }
+  pre {
+    background: #10241C; color: #D6F5E3; border-radius: 10px; padding: 16px 18px;
+    overflow-x: auto; font-size: 0.88rem; font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    margin: 12px 0;
+  }
+  pre .c { color: #7FB69A; }   /* commentaires */
+  pre .p { color: #FFD166; }   /* prompt/invite */
+  code {
+    background: var(--vert-clair); color: var(--vert-fonce);
+    padding: 2px 6px; border-radius: 5px; font-size: 0.9em;
+    font-family: "SF Mono", "Fira Code", Consolas, monospace;
+  }
+  .tip {
+    background: #FFF8E1; border-left: 4px solid var(--orange);
+    padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 16px 0;
+  }
+  .info {
+    background: #E3F2FD; border-left: 4px solid var(--bleu);
+    padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 16px 0;
+  }
+  .warn {
+    background: #FDECEA; border-left: 4px solid #C62828;
+    padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 16px 0;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--bord); }
+  th { background: var(--vert-clair); color: var(--vert-fonce); }
+  td code { white-space: nowrap; }
+  .btn {
+    display: inline-block; background: var(--vert); color: #fff !important;
+    padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 600;
+    margin: 6px 6px 0 0;
+  }
+  .btn:hover { background: var(--vert-fonce); }
+  .footer { text-align: center; color: #9aa5a0; font-size: 0.85rem; margin-top: 56px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } .hero h1 { font-size: 1.7rem; } }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>🥦 Goodfood Recipe Archiver</h1>
+  <p class="tagline">Récupère tes recettes Goodfood achetées et les compile en <strong>un seul PDF</strong> — piloté par une IA, sans rien installer.</p>
+  <span class="badge">🤖 Mode agent IA &nbsp;·&nbsp; 🔐 Connexion réelle &nbsp;·&nbsp; 📄 PDF final</span>
+</div>
+
+<div class="wrap">
+
+  <!-- ==================== LE PROBLÈME ==================== -->
+  <section>
+    <h2><span class="num">💡</span>Le problème que ça résout</h2>
+    <div class="card">
+      <p>Goodfood n'envoie plus les recettes sur papier. Elles sont stockées dans ton <strong>compte en ligne</strong>. Pour retrouver une recette, il faut se reconnecter au site, naviguer dans ses commandes, et ouvrir chaque plat un par un.</p>
+      <p>Ce projet automatise tout : à partir d'une <strong>capture d'écran de ta facture</strong>, il retrouve les recettes sur le site, les extrait, et produit <strong>un PDF propre par recette</strong>, puis les <strong>assemble en un seul fichier final</strong>.</p>
+    </div>
+  </section>
+
+  <!-- ==================== COMMENT ÇA MARCHE ==================== -->
+  <section>
+    <h2><span class="num">⚙️</span>Comment ça marche</h2>
+    <div class="pipeline">
+      <div class="step"><span class="ico">🔐</span><span class="lbl">Connexion réelle<br>(email + mot de passe)</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="ico">🧾</span><span class="lbl">Lecture de la facture<br>(OCR)</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="ico">🔎</span><span class="lbl">Recherche des plats<br>sur le site</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="ico">📄</span><span class="lbl">1 PDF<br>par recette</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="ico">📚</span><span class="lbl">Assemblage<br>PDF final</span></div>
+    </div>
+
+    <h3>Les 3 points techniques clés</h3>
+    <div class="grid2">
+      <div class="card">
+        <strong>🔐 Connexion réelle (pas de cookie)</strong>
+        <p style="margin-top:6px">Un agent IA part d'un environnement neuf, il ne peut pas réutiliser un cookie de ton navigateur. Le code remplit donc <strong>réellement</strong> le formulaire Goodfood avec ton email et ton mot de passe.</p>
+      </div>
+      <div class="card">
+        <strong>🧠 Correspondance intelligente</strong>
+        <p style="margin-top:6px">Le nom du plat sur la facture (ex. « Poulet au beurre ») est rapproché de la recette du site (ex. « Poulet au beurre à l'indienne ») grâce à un <strong>match flou</strong> (rapidfuzz).</p>
+      </div>
+      <div class="card">
+        <strong>📚 Assemblage PDF</strong>
+        <p style="margin-top:6px">Chaque recette devient un PDF (titre, ingrédients, étapes), puis tous les PDF sont fusionnés avec une <strong>page de garde</strong> en un fichier unique.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== L'ARCHITECTURE ==================== -->
+  <section>
+    <h2><span class="num">🧱</span>L'architecture du projet</h2>
+    <div class="card">
+      <pre><span class="c"># Structure du dépôt</span>
+goodfood-recipe-archiver/
+├── AGENTS.md          <span class="c"># ⭐ instructions lues par l'agent IA</span>
+├── run.py             <span class="c"># point d'entrée unique (1 commande)</span>
+├── README.md          <span class="c"># documentation humaine</span>
+├── requirements.txt   <span class="c"># dépendances Python</span>
+├── .env.example       <span class="c"># → copier en .env (identifiants)</span>
+├── config/config.yaml <span class="c"># URLs + sélecteurs du site</span>
+├── src/
+│   ├── auth.py        <span class="c"># connexion RÉELLE par identifiants</span>
+│   ├── ocr_receipt.py <span class="c"># lecture de la facture (OCR)</span>
+│   ├── finder.py      <span class="c"># recherche des recettes</span>
+│   ├── pdf_builder.py <span class="c"># 1 PDF par recette</span>
+│   ├── assembler.py   <span class="c"># fusion en PDF final</span>
+│   └── demo.py        <span class="c"># PDF d'exemple (sans compte)</span>
+└── data/
+    ├── receipts/      <span class="c"># captures de facture</span>
+    ├── recipes/       <span class="c"># PDF individuels</span>
+    └── output/        <span class="c"># PDF final</span></pre>
+    </div>
+
+    <h3>Les commandes principales</h3>
+    <div class="card">
+      <table>
+        <tr><th>Commande</th><th>Rôle</th></tr>
+        <tr><td><code>python run.py</code></td><td>Tout le pipeline d'un coup</td></tr>
+        <tr><td><code>python -m src.cli auth</code></td><td>Connexion réelle + sauvegarde de session</td></tr>
+        <tr><td><code>python -m src.cli extract</code></td><td>Lire la facture (OCR ou liste)</td></tr>
+        <tr><td><code>python -m src.cli find</code></td><td>Retrouver les recettes sur le site</td></tr>
+        <tr><td><code>python -m src.cli build</code></td><td>Générer un PDF par recette</td></tr>
+        <tr><td><code>python -m src.cli assemble</code></td><td>Assembler en PDF final</td></tr>
+        <tr><td><code>python -m src.cli demo</code></td><td>PDF d'exemple (sans compte)</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== FORK ==================== -->
+  <section>
+    <h2><span class="num">🍴</span>Comment forker le projet</h2>
+    <div class="card">
+      <p>« Forker » = copier le dépôt dans <strong>ton propre compte GitHub</strong> pour pouvoir le modifier librement, sans toucher à l'original.</p>
+    </div>
+
+    <h3>Méthode A — Forker via le site GitHub (la plus simple, même sur iPhone)</h3>
+    <div class="card">
+      <p><strong>1.</strong> Ouvre la page du dépôt sur GitHub.</p>
+      <p><strong>2.</strong> Clique sur le bouton <strong>« Fork »</strong> en haut à droite.</p>
+      <p><strong>3.</strong> Choisis ton compte comme destination, puis <strong>« Create fork »</strong>.</p>
+      <p><strong>4.</strong> C'est fait 🎉 — tu as maintenant ta propre copie sous <code>ton-pseudo/goodfood-recipe-archiver</code>.</p>
+      <div class="info">💡 Après le fork, n'oublie pas d'ajouter ton fichier <code>.env</code> (avec tes identifiants) — il est ignoré par Git, donc jamais partagé publiquement.</div>
+    </div>
+
+    <h3>Méthode B — Cloner en local (si tu veux travailler sur un ordi)</h3>
+    <div class="card">
+      <pre><span class="p">$</span> git clone https://github.com/ton-pseudo/goodfood-recipe-archiver.git
+<span class="p">$</span> cd goodfood-recipe-archiver
+<span class="p">$</span> pip install -r requirements.txt
+<span class="p">$</span> playwright install chromium
+<span class="p">$</span> cp .env.example .env        <span class="c"># puis édite .env avec tes identifiants</span>
+<span class="p">$</span> python run.py</pre>
+    </div>
+
+    <h3>Méthode C — Depuis la ligne de commande (fork + clone)</h3>
+    <div class="card">
+      <p>GitHub n'a pas de commande native « fork », mais le CLI <code>gh</code> le fait très bien :</p>
+      <pre><span class="p">$</span> gh repo fork NOM_DU_REPO_ORIGINAL --clone</pre>
+    </div>
+  </section>
+
+  <!-- ==================== MODE AGENT IA ==================== -->
+  <section>
+    <h2><span class="num">🤖</span>L'utiliser avec une IA (depuis ton iPhone)</h2>
+    <div class="card">
+      <p><strong>1.</strong> Ouvre Claude / Mistral / ChatGPT et colle l'URL de <strong>ton</strong> dépôt (après le fork).</p>
+      <pre><span class="c"># Exemple de message à envoyer à l'IA :</span>
+« Fais tourner le projet dans ce dépôt GitHub :
+récupère mes recettes Goodfood et donne-moi le PDF final.
+Voici la capture de ma facture : [image] »</pre>
+      <p><strong>2.</strong> L'IA lit automatiquement <code>AGENTS.md</code> (le mode d'emploi du projet).</p>
+      <p><strong>3.</strong> Elle te demande <strong>une seule fois</strong> ton email + mot de passe Goodfood.</p>
+      <p><strong>4.</strong> Elle installe tout, se connecte réellement, retrouve tes recettes et te rend <code>Goodfood_recettes.pdf</code>.</p>
+    </div>
+
+    <div class="warn">
+      ⚠️ <strong>Point important :</strong> pour une vraie connexion à ton compte, l'IA a besoin de tes identifiants. Ne les colle jamais dans un message public. Certains sites peuvent afficher un CAPTCHA — dans ce cas, l'agent te préviendra clairement.
+    </div>
+  </section>
+
+  <!-- ==================== FAQ / DEPANNAGE ==================== -->
+  <section>
+    <h2><span class="num">🛠️</span>Dépannage rapide</h2>
+    <div class="card">
+      <table>
+        <tr><th>Problème</th><th>Solution</th></tr>
+        <tr><td>« Champ email/password introuvable »</td><td>Les sélecteurs ont changé → adapter <code>config.yaml</code></td></tr>
+        <tr><td>« CAPTCHA détecté »</td><td>Connexion auto bloquée → réessayer plus tard ou <code>auth --manual</code></td></tr>
+        <tr><td>« Aucun lien de recettes »</td><td>Lancer <code>find --dump</code> et inspecter le HTML</td></tr>
+        <tr><td>Recettes « introuvables »</td><td>Baisser <code>matching.threshold</code> (ex. 0.6)</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <div class="footer">
+    🥦 Goodfood Recipe Archiver — usage personnel uniquement · respecte les CGU de Goodfood<br>
+    Généré pour expliquer le projet, son fonctionnement et comment le forker.
+  </div>
+</div>
+
+</body>
+</html>
