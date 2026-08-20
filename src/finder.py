@@ -1,8 +1,9 @@
 """Recherche des recettes sur Goodfood à partir des noms de plats.
 
-Sécurité garantie :
-- Les garde-fous de sécurité sont activés en mode Strict Read-Only.
-- Aucune interaction de panier, d'achat ou d'accès bancaire n'est permise.
+Sécurité & Vitesse garanties :
+- Mode Strict Read-Only avec garde-fous actifs.
+- Collecte rapide et fiable du catalogue complet (gestion d'hydratation Next.js).
+- Extraction riche : ingrédients, étapes, description, photo HD.
 """
 from __future__ import annotations
 
@@ -50,7 +51,10 @@ def best_match(query: str, candidates: list[tuple[str, str]]) -> Optional[tuple[
 def scrape_recipe(page, url: str, cfg: dict) -> dict:
     """Ouvre une recette Goodfood et extrait son contenu structuré."""
     page.goto(url, wait_until="domcontentloaded")
-    time.sleep(cfg["rate_limit"]["delay_seconds"])
+    try:
+        page.wait_for_selector("h1", timeout=8000)
+    except Exception:
+        time.sleep(1)
 
     # 1. Titre
     h1 = page.locator("h1").first
@@ -113,49 +117,55 @@ def scrape_recipe(page, url: str, cfg: dict) -> dict:
 
 
 def collect_all_candidates(page, base_recipes_url: str) -> list[tuple[str, str]]:
-    """Parcourt les différentes semaines et onglets pour trouver toutes les recettes disponibles."""
+    """Parcourt les semaines actives et onglets pour trouver toutes les recettes disponibles."""
     print(f"🌐 Navigation sur {base_recipes_url}")
     page.goto(base_recipes_url, wait_until="domcontentloaded")
-    time.sleep(2)
+    try:
+        page.wait_for_selector('a[href*="product/recipe"], a[href*="recipes?category"]', timeout=12000)
+    except Exception:
+        time.sleep(2)
 
     candidates_dict: dict[str, str] = {}
 
-    date_tabs = page.locator('div[class*="min-w-[92px]"], div[class*="week"], div[class*="Date"]').all()
-    num_weeks = max(1, len(date_tabs))
-
-    for idx in range(num_weeks):
+    # 1. Clique sur Toutes les recettes si visible
+    toutes = page.locator(':text("Toutes les recettes"), a[href*="category=3MKMain"]').first
+    if toutes.count() > 0:
         try:
-            tabs = page.locator('div[class*="min-w-[92px]"], div[class*="week"], div[class*="Date"]').all()
-            if tabs and idx < len(tabs):
-                tab = tabs[idx]
-                tab_text = tab.inner_text().replace('\n', ' ').strip()
-                print(f"   📅 Semaine {idx+1}/{len(tabs)} : {tab_text}")
-                tab.click()
-                time.sleep(1.5)
+            toutes.click()
+            time.sleep(1)
+        except Exception:
+            pass
 
-            toutes = page.locator(':text("Toutes les recettes"), :text("All Recipes")').first
-            if toutes.count() > 0:
-                try:
-                    toutes.click()
-                    time.sleep(1)
-                except Exception:
-                    pass
+    for _ in range(4):
+        page.mouse.wheel(0, 3000)
+        time.sleep(0.2)
 
-            for _ in range(4):
-                page.mouse.wheel(0, 2500)
-                time.sleep(0.4)
+    for l in page.locator('a[href*="/product/recipe/"]').all():
+        t = (l.inner_text() or "").strip().replace("\n", " ")
+        h = l.get_attribute("href") or ""
+        if h.startswith("/"):
+            h = "https://www.makegoodfood.ca" + h
+        if t and h:
+            candidates_dict[h] = t
 
-            links = page.locator('a[href*="/recipe/"], a[href*="/product/recipe/"]').all()
-            for l in links:
-                t = (l.inner_text() or l.get_attribute("title") or l.get_attribute("aria-label") or "").strip()
-                t = " ".join(t.split())
+    # 2. Navigation sur les onglets des autres semaines
+    date_spans = page.locator('span:has-text("août"), span:has-text("sept"), span:has-text("oct"), span:has-text("nov")').all()
+    for span in date_spans:
+        try:
+            span.locator("..").click()
+            time.sleep(1)
+            for _ in range(3):
+                page.mouse.wheel(0, 3000)
+                time.sleep(0.2)
+            for l in page.locator('a[href*="/product/recipe/"]').all():
+                t = (l.inner_text() or "").strip().replace("\n", " ")
                 h = l.get_attribute("href") or ""
                 if h.startswith("/"):
                     h = "https://www.makegoodfood.ca" + h
-                if t and h and h not in candidates_dict:
+                if t and h:
                     candidates_dict[h] = t
-        except Exception as e:
-            print(f"   ⚠️  Avertissement semaine {idx+1}: {e}")
+        except Exception:
+            pass
 
     return [(title, url) for url, title in candidates_dict.items()]
 
@@ -172,9 +182,9 @@ def run(dump: bool = False, headless: bool = True) -> Path:
     missing: list[str] = []
 
     try:
-        base_recipes_url = "https://www.makegoodfood.ca/fr-CA/recipes"
+        base_recipes_url = cfg.get("goodfood", {}).get("recipes_url", "https://www.makegoodfood.ca/fr-CA/recipes")
         candidates = collect_all_candidates(page, base_recipes_url)
-        print(f"\n📚 {len(candidates)} recettes trouvées au total dans le catalogue Goodfood.")
+        print(f"\n📚 {len(candidates)} recettes indexées dans le catalogue Goodfood.")
 
         if dump:
             dump_path = RECIPES_DIR / "page_dump.html"
@@ -187,7 +197,8 @@ def run(dump: bool = False, headless: bool = True) -> Path:
             print(f"\n🔎 Recherche du plat : « {meal} »")
             match = best_match(meal, candidates)
             if match is None or match[2] < threshold:
-                print(f"   ❌ Introuvable (meilleur score {match[2]:.2f} si disponible < seuil {threshold}).")
+                best_score_str = f"{match[2]:.2f}" if match else "0.00"
+                print(f"   ❌ Introuvable (meilleur score : {best_score_str} < seuil {threshold}).")
                 missing.append(meal)
                 continue
 

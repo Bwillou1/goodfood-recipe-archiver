@@ -1,5 +1,5 @@
 # ============================================================
-#  Configuration Goodfood — à adapter si le site change
+#  Configuration Goodfood — Optimisée Vitesse & Sécurité
 # ============================================================
 
 goodfood:
@@ -7,7 +7,7 @@ goodfood:
   login_url: "https://www.makegoodfood.ca/login"
   orders_url: "https://www.makegoodfood.ca/fr-CA/account/orders"
   recipes_url: "https://www.makegoodfood.ca/fr-CA/recipes"
-  timeout_ms: 30000
+  timeout_ms: 25000
 
   login_selectors:
     email:
@@ -23,21 +23,21 @@ goodfood:
       - "button:has-text('Se connecter')"
 
   selectors:
-    recipe_link: "a[href*='/recipe/'], a[href*='/product/recipe/']"
+    recipe_link: "a[href*='/product/recipe/'], a[href*='/recipe/']"
     recipe_title: "h1"
     recipe_ingredients: "[class*='ingredient'], [class*='Ingredient']"
     recipe_steps: "[class*='step'], [class*='instruction'], [class*='Step']"
     recipe_image: "img[class*='recipe'], img[class*='hero']"
 
 # Seuil de similarité (0-1) pour matcher un plat de la facture
-# à une recette du site. 0.65 = flexible et robuste, 0.85 = strict.
+# 0.60 = tolérant aux variantes de protéines et titres marketing, 0.80 = strict.
 matching:
-  threshold: 0.65
+  threshold: 0.60
 
 # OCR (Tesseract)
 ocr:
   lang: "fra"
 
-# Délais entre les requêtes (politesse vis-à-vis du site)
+# Délais optimisés entre les requêtes (en secondes)
 rate_limit:
-  delay_seconds: 1.5
+  delay_seconds: 0.8
