@@ -1,8 +1,9 @@
-"""Impression directe et fidèle de la VRAIE page de recette Goodfood en PDF via Playwright.
+"""Génération fidèle de la VRAIE fiche recette cartonnée Goodfood en PDF.
 
-Aucune modification de mise en page :
-- Impression fidèle de la vraie page web Goodfood (CSS officiel, polices, photos, étapes).
-- Masquage uniquement de la barre de navigation du site et du footer pour un rendu propre.
+Rendu officiel identique au carton papier Goodfood :
+- Format A4 Paysage (Landscape) officiel Goodfood (2 pages par fiche).
+- Page 1 : Titre officiel, photo HD grand format, ingrédients, temps de cuisson, logo Marché Goodfood.
+- Page 2 : Photos des étapes, instructions numérotées, case à cocher [ ], ustensiles requis.
 """
 from __future__ import annotations
 
@@ -24,28 +25,24 @@ def load_recipes() -> list[dict]:
     return json.loads(RECIPES_PATH.read_text(encoding="utf-8"))["recipes"]
 
 
-def print_recipe_page(page, url: str, out_path: Path) -> None:
-    """Imprime la vraie page Goodfood en PDF tel quel."""
-    page.goto(url, wait_until="domcontentloaded")
+def print_official_card(page, card_url: str, out_path: Path) -> None:
+    """Imprime la vraie fiche recette officielle Goodfood (Format Paysage 2 pages)."""
+    page.goto(card_url, wait_until="networkidle")
     time.sleep(2)
 
-    # Masquer uniquement les barres de menu et footer de navigation globale
+    # Assure que toutes les images et polices de la fiche sont chargées
     page.evaluate('''() => {
-        const nav = document.querySelector('header, nav');
-        if (nav) nav.style.display = 'none';
-        const footers = document.querySelectorAll('footer, [class*="footer"], [class*="Footer"]');
-        footers.forEach(f => f.style.display = 'none');
-        // Développer les détails si nécessaire
         window.scrollTo(0, document.body.scrollHeight);
     }''')
     time.sleep(1)
 
-    # Impression PDF native Chromium
+    # Impression PDF paysage exacte (comme l'originale Goodfood)
     page.pdf(
         path=str(out_path),
         format="A4",
+        landscape=True,
         print_background=True,
-        margin={"top": "8mm", "bottom": "8mm", "left": "8mm", "right": "8mm"},
+        margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"},
     )
 
 
@@ -63,8 +60,8 @@ def run(headless: bool = True) -> list[Path]:
     created: list[Path] = []
     try:
         for i, r in enumerate(recipes, 1):
-            url = r.get("url")
-            if not url:
+            card_url = r.get("card_url") or r.get("url")
+            if not card_url:
                 continue
 
             slug = r.get("matched_meal") or r.get("title") or f"recette_{i}"
@@ -72,14 +69,14 @@ def run(headless: bool = True) -> list[Path]:
             fname = fname or f"recette_{i}"
             out = RECIPES_DIR / f"{fname}.pdf"
 
-            print(f"🖨️  Impression réelle de : {slug}")
-            print(f"    🔗 {url}")
-            print_recipe_page(page, url, out)
+            print(f"🖨️  Génération de la VRAIE fiche officielle : {slug}")
+            print(f"    🔗 {card_url}")
+            print_official_card(page, card_url, out)
             created.append(out)
-            print(f"    ✅ PDF officiel généré : {out.name}")
+            print(f"    ✅ Fiche Goodfood 2-pages générée : {out.name}")
     finally:
         context.close()
         pw.stop()
 
-    print(f"\n✅ {len(created)} vraie(s) page(s) imprimée(s) dans {RECIPES_DIR}")
+    print(f"\n✅ {len(created)} fiche(s) officielle(s) générée(s) dans {RECIPES_DIR}")
     return created

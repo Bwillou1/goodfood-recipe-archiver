@@ -1,9 +1,9 @@
-"""Recherche des recettes sur Goodfood à partir des noms de plats.
+"""Recherche des recettes sur Goodfood et extraction des IDs de fiches officielles.
 
 Sécurité & Vitesse garanties :
 - Mode Strict Read-Only avec garde-fous actifs.
-- Collecte rapide et fiable du catalogue complet (gestion d'hydratation Next.js).
-- Extraction riche : ingrédients, étapes, description, photo HD.
+- Récupère l'identifiant Goodfood (ex: GF105585, GF105597) pour chaque plat.
+- Construit l'URL officielle de la fiche recette cartonnée (https://www2.makegoodfood.ca/recipe-card/...).
 """
 from __future__ import annotations
 
@@ -31,6 +31,14 @@ def load_meals() -> list[str]:
     return json.loads(MEALS_PATH.read_text(encoding="utf-8"))["meals"]
 
 
+def extract_recipe_id(url: str) -> Optional[str]:
+    """Extrait l'ID Goodfood de type GF123456 ou 123456 depuis l'URL."""
+    m = re.search(r"(GF\d+|\b\d{5,7}\b)", url, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+    return None
+
+
 def best_match(query: str, candidates: list[tuple[str, str]]) -> Optional[tuple[str, str, float]]:
     """Retourne le meilleur candidat (titre, url, score) pour une requête."""
     q = normalize(query)
@@ -48,72 +56,12 @@ def best_match(query: str, candidates: list[tuple[str, str]]) -> Optional[tuple[
     return best
 
 
-def scrape_recipe(page, url: str, cfg: dict) -> dict:
-    """Ouvre une recette Goodfood et extrait son contenu structuré."""
-    page.goto(url, wait_until="domcontentloaded")
-    try:
-        page.wait_for_selector("h1", timeout=8000)
-    except Exception:
-        time.sleep(1)
-
-    # 1. Titre
-    h1 = page.locator("h1").first
-    title = h1.inner_text().strip() if h1.count() > 0 else page.title()
-    title = title.replace(" | Marché Goodfood", "").replace(" | Goodfood Market", "").strip()
-
-    # 2. Image principale
-    image_url = ""
-    for img in page.locator("img").all():
-        src = img.get_attribute("src") or ""
-        if any(k in src for k in ["cdn.makegoodfood.ca/uploads", "images.ctfassets.net", "cloudfront.net"]) and \
-           not any(b in src.lower() for b in ["icon", "logo", "flag", "svg", "pixel", "bing", "google", "facebook"]):
-            image_url = src
-            break
-
-    body_text = page.locator("body").inner_text()
-
-    # 3. Description
-    description = ""
-    if "Description" in body_text:
-        after_desc = body_text.split("Description", 1)[1]
-        for stop_word in ["Contient:", "Ingrédients", "Vous aurez besoin de", "Nutrition"]:
-            if stop_word in after_desc:
-                after_desc = after_desc.split(stop_word, 1)[0]
-        description = " ".join(after_desc.split())
-
-    # 4. Ingrédients
-    ingredients: list[str] = []
-    if "Ingrédients" in body_text:
-        ing_text = body_text.split("Ingrédients", 1)[1]
-        for stop_word in ["Vous aurez besoin de", "Nutrition", "Détails de la recette", "Étape 1", "Step 1"]:
-            if stop_word in ing_text:
-                ing_text = ing_text.split(stop_word, 1)[0]
-        raw_lines = [l.strip() for l in ing_text.splitlines() if l.strip()]
-        for l in raw_lines:
-            if l.lower() in ["4 portions", "(double pour 4 portions)", "2 portions", "ingrédients", "ingredients"]:
-                continue
-            if len(l) > 2:
-                ingredients.append(l)
-
-    # 5. Étapes de préparation
-    steps: list[str] = []
-    step_pattern = re.compile(
-        r'((?:Étape|Step)\s+\d+:\s*[^\n]+)\n((?:(?!\n(?:Étape|Step)\s+\d+:|\nApprendre a nous connaitre|\nFinances|\nAbout us)[\s\S])*)',
-        re.IGNORECASE,
-    )
-    for m in step_pattern.finditer(body_text):
-        step_title = m.group(1).strip()
-        step_body = " ".join(m.group(2).split())
-        steps.append(f"{step_title} — {step_body}")
-
-    return {
-        "title": title,
-        "url": url,
-        "image": image_url,
-        "ingredients": ingredients,
-        "steps": steps,
-        "description": description,
-    }
+def get_official_card_url(page, product_url: str, lang: str = "fr") -> str:
+    """Trouve l'URL de la vraie fiche recette officielle Goodfood."""
+    recipe_id = extract_recipe_id(product_url)
+    if recipe_id:
+        return f"https://www2.makegoodfood.ca/recipe-card/{recipe_id}/{lang}"
+    return product_url
 
 
 def collect_all_candidates(page, base_recipes_url: str) -> list[tuple[str, str]]:
@@ -191,7 +139,7 @@ def run(dump: bool = False, headless: bool = True) -> Path:
             dump_path.write_text(page.content(), encoding="utf-8")
             print(f"   🗂️  HTML sauvegardé dans {dump_path}.")
 
-        threshold = cfg.get("matching", {}).get("threshold", 0.65)
+        threshold = cfg.get("matching", {}).get("threshold", 0.60)
 
         for meal in meals:
             print(f"\n🔎 Recherche du plat : « {meal} »")
@@ -202,19 +150,21 @@ def run(dump: bool = False, headless: bool = True) -> Path:
                 missing.append(meal)
                 continue
 
-            title, url, score = match
+            title, product_url, score = match
+            official_card_url = get_official_card_url(page, product_url, lang="fr")
+            recipe_id = extract_recipe_id(product_url) or ""
+
             print(f"   ✅ Trouvé : {title} (score: {score:.2f})")
-            print(f"      🔗 URL : {url}")
-            try:
-                recipe = scrape_recipe(page, url, cfg)
-                recipe["matched_meal"] = meal
-                recipes.append(recipe)
-            except Exception as e:
-                print(f"   ⚠️  Erreur d'extraction : {e}")
-                recipes.append({
-                    "title": title, "url": url, "matched_meal": meal,
-                    "ingredients": [], "steps": [], "image": "", "description": "",
-                })
+            print(f"      🏷️  ID Goodfood : {recipe_id}")
+            print(f"      🖨️  Fiche officielle : {official_card_url}")
+
+            recipes.append({
+                "title": title,
+                "product_url": product_url,
+                "card_url": official_card_url,
+                "recipe_id": recipe_id,
+                "matched_meal": meal,
+            })
     finally:
         context.close()
         pw.stop()
