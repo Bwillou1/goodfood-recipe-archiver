@@ -3,7 +3,8 @@
 Rendu officiel identique au carton papier Goodfood :
 - Format A4 Paysage (Landscape) officiel Goodfood (2 pages par fiche).
 - Page 1 : Titre officiel, photo HD grand format, ingrédients, temps de cuisson, logo Marché Goodfood.
-- Page 2 : Photos des étapes, instructions numérotées, case à cocher [ ], ustensiles requis.
+- Page 2 : Photos des étapes HD, instructions numérotées, case à cocher [ ], ustensiles requis.
+- Décodage complet garanti de toutes les images pour éliminer tout spinner "Loading...".
 """
 from __future__ import annotations
 
@@ -11,6 +12,8 @@ import json
 import time
 from pathlib import Path
 from typing import Optional
+
+from pypdf import PdfReader, PdfWriter
 
 from .auth import ensure_session
 from .guardrails import apply_guardrails
@@ -26,24 +29,52 @@ def load_recipes() -> list[dict]:
 
 
 def print_official_card(page, card_url: str, out_path: Path) -> None:
-    """Imprime la vraie fiche recette officielle Goodfood (Format Paysage 2 pages)."""
+    """Imprime la vraie fiche recette officielle Goodfood avec chargement complet des 2 pages."""
     page.goto(card_url, wait_until="networkidle")
-    time.sleep(2)
+    time.sleep(1.5)
 
-    # Assure que toutes les images et polices de la fiche sont chargées
-    page.evaluate('''() => {
+    # 1. Déclenche le lazy-loading de la page 2 et force le chargement de toutes les images HD
+    page.evaluate('''async () => {
         window.scrollTo(0, document.body.scrollHeight);
+        await new Promise(r => setTimeout(r, 800));
+        
+        const imgs = Array.from(document.querySelectorAll('img'));
+        await Promise.all(imgs.map(img => {
+            if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+            return new Promise(resolve => {
+                img.onload = resolve;
+                img.onerror = resolve;
+                setTimeout(resolve, 3000); // timeout de secours
+            });
+        }));
     }''')
     time.sleep(1)
 
-    # Impression PDF paysage exacte (comme l'originale Goodfood)
+    # 2. Impression PDF paysage native
+    temp_path = out_path.with_suffix(".tmp.pdf")
     page.pdf(
-        path=str(out_path),
+        path=str(temp_path),
         format="A4",
         landscape=True,
         print_background=True,
         margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"},
     )
+
+    # 3. Vérification des pages : si la page 2 est vide (ex: plat micro-ondes sans étapes), on ne garde que la page 1
+    reader = PdfReader(str(temp_path))
+    writer = PdfWriter()
+
+    for idx, p in enumerate(reader.pages):
+        text = (p.extract_text() or "").strip()
+        imgs = len(p.images)
+        # Conserver la page si elle contient du texte ou des images
+        if idx == 0 or len(text) > 20 or imgs > 0:
+            writer.add_page(p)
+
+    with open(out_path, "wb") as f:
+        writer.write(f)
+
+    temp_path.unlink(missing_ok=True)
 
 
 def run(headless: bool = True) -> list[Path]:

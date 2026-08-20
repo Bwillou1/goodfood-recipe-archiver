@@ -1,8 +1,8 @@
 """Recherche des recettes sur Goodfood et extraction des IDs de fiches officielles.
 
 Sécurité & Vitesse garanties :
-- Mode Strict Read-Only avec garde-fous actifs.
-- Récupère l'identifiant Goodfood (ex: GF105585, GF105597) pour chaque plat.
+- Priorise les vrais kits recettes prêts-à-cuisiner (avec 6 étapes et photos HD sur la page 2).
+- Récupère l'identifiant Goodfood (ex: GF105597, GF105603, GF105585).
 - Construit l'URL officielle de la fiche recette cartonnée (https://www2.makegoodfood.ca/recipe-card/...).
 """
 from __future__ import annotations
@@ -40,9 +40,10 @@ def extract_recipe_id(url: str) -> Optional[str]:
 
 
 def best_match(query: str, candidates: list[tuple[str, str]]) -> Optional[tuple[str, str, float]]:
-    """Retourne le meilleur candidat (titre, url, score) pour une requête."""
+    """Retourne le meilleur candidat pour une requête en priorisant les vrais kits recettes."""
     q = normalize(query)
     best: Optional[tuple[str, str, float]] = None
+
     for title, url in candidates:
         norm_title = normalize(title)
         score = fuzz.ratio(q, norm_title) / 100.0
@@ -50,9 +51,16 @@ def best_match(query: str, candidates: list[tuple[str, str]]) -> Optional[tuple[
         token_score = fuzz.token_set_ratio(q, norm_title) / 100.0
         
         combined_score = max(score, partial * 0.9, token_score)
-        
+
+        # Bonus pour les vrais kits recettes (Prêt-à-cuisiner) par rapport aux barquettes micro-ondes (Prêt-à-manger)
+        if "prt-mange" in url.lower() or "pret-a-manger" in norm_title or "prêt-à-manger" in title.lower():
+            combined_score *= 0.85
+        else:
+            combined_score = min(1.0, combined_score * 1.1)
+
         if best is None or combined_score > best[2]:
             best = (title, url, combined_score)
+
     return best
 
 
