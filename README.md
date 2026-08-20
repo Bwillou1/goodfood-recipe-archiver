@@ -12,7 +12,7 @@ Sur ton **iPhone, iPad ou Ordinateur**, ouvre ton IA et colle simplement ce mess
 ```text
 Agis en tant qu'agent autonome. Ton but est de récupérer mes vraies fiches recettes Goodfood et de me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
 
-🔗 REPO GITHUB : https://github.com/TON_PSEUDO/goodfood-recipe-archiver.git
+🔗 REPO GITHUB : https://github.com/Bwillou1/goodfood-recipe-archiver.git
 📧 COURRIEL GOODFOOD : mon_email@exemple.com
 🔑 MOT DE PASSE : MonMotDePasse123!
 🧾 FACTURE : Voir la capture d'écran ci-jointe.
