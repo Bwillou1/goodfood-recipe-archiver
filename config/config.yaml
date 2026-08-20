@@ -5,14 +5,10 @@
 goodfood:
   base_url: "https://www.makegoodfood.ca"
   login_url: "https://www.makegoodfood.ca/login"
-  # ⚠️ URLs ci-dessous à VÉRIFIER selon ton compte réel
-  orders_url: "https://www.makegoodfood.ca/account/orders"
-  recipes_url: "https://www.makegoodfood.ca/recipes"
+  orders_url: "https://www.makegoodfood.ca/fr-CA/account/orders"
+  recipes_url: "https://www.makegoodfood.ca/fr-CA/recipes"
   timeout_ms: 30000
 
-  # Sélecteurs du formulaire de CONNEXION (login réel par identifiants).
-  # À ajuster si le site change. Chaque clé accepte une liste de sélecteurs
-  # essayés dans l'ordre (le premier visible est utilisé).
   login_selectors:
     email:
       - "input[type=email]"
@@ -26,24 +22,22 @@ goodfood:
       - "input[type=submit]"
       - "button:has-text('Se connecter')"
 
-  # Sélecteurs CSS des pages de recettes — à ajuster selon la structure réelle du HTML.
-  # Utilise `python -m src.cli find --dump` pour inspecter une page.
   selectors:
-    recipe_link: "a[href*='recipe'], a[href*='/recipes/']"
+    recipe_link: "a[href*='/recipe/'], a[href*='/product/recipe/']"
     recipe_title: "h1"
     recipe_ingredients: "[class*='ingredient'], [class*='Ingredient']"
     recipe_steps: "[class*='step'], [class*='instruction'], [class*='Step']"
     recipe_image: "img[class*='recipe'], img[class*='hero']"
 
 # Seuil de similarité (0-1) pour matcher un plat de la facture
-# à une recette du site. 0.75 = tolérant, 0.9 = strict.
+# à une recette du site. 0.65 = flexible et robuste, 0.85 = strict.
 matching:
-  threshold: 0.75
+  threshold: 0.65
 
 # OCR (Tesseract)
 ocr:
-  lang: "fra"   # fr/en selon la langue de tes factures
+  lang: "fra"
 
 # Délais entre les requêtes (politesse vis-à-vis du site)
 rate_limit:
-  delay_seconds: 2.0
+  delay_seconds: 1.5

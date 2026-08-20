@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
@@ -29,10 +30,6 @@ def _cover_page(pdf_path: Path, recipes_count: int, titles: list[str]) -> None:
     sub = ParagraphStyle(
         "CoverSub", parent=base["Normal"], fontSize=12, leading=16,
         textColor=colors.HexColor("#444444"), alignment=TA_CENTER,
-    )
-    item = ParagraphStyle(
-        "Item", parent=base["Normal"], fontName="Helvetica",
-        fontSize=11, leading=15,
     )
 
     doc = SimpleDocTemplate(str(pdf_path), pagesize=A4,
@@ -66,17 +63,21 @@ def _cover_page(pdf_path: Path, recipes_count: int, titles: list[str]) -> None:
     doc.build(story)
 
 
-def run() -> Path:
+def run(pdf_paths: Optional[list[Path]] = None) -> Path:
     ensure_dirs()
-    pdfs = sorted(RECIPES_DIR.glob("*.pdf"))
+    if pdf_paths is not None:
+        pdfs = [p for p in pdf_paths if p.exists()]
+    else:
+        pdfs = sorted([p for p in RECIPES_DIR.glob("*.pdf") if not p.name.startswith("demo_") and not p.name.startswith("test_")])
+        if not pdfs:
+            pdfs = sorted(RECIPES_DIR.glob("*.pdf"))
+
     if not pdfs:
         print("⚠️  Aucun PDF de recette trouvé. Lance d'abord : python -m src.cli build")
         return FINAL_PATH
 
-    # Titres pour la page de garde
     titles = [p.stem.replace("_", " ") for p in pdfs]
 
-    # Page de garde temporaire
     cover = OUTPUT_DIR / "_cover.pdf"
     _cover_page(cover, len(pdfs), titles)
 
