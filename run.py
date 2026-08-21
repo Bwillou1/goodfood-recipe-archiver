@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Point d'entrée UNIQUE pour un agent IA — exécute tout le pipeline de manière ultra-rapide.
+"""Point d'entrée UNIQUE pour un agent IA — Architecture 2 Phases & Exécution Robuste.
 
 Un agent IA (Claude, Mistral, ...) n'a qu'à lancer :
-
     python run.py
 
-après avoir :
-  1. créé le fichier .env avec les identifiants Goodfood (voir .env.example) ;
-  2. déposé la capture de la facture dans data/receipts/ (ou créé data/meals.json).
-
-L'humain ne fait rien d'autre : aucune installation, aucun code à écrire,
-aucun cookie à exporter.
+Pipeline d'exécution :
+1. Extraction des plats (OCR facture ou meals.json)
+2. Phase A : Découverte authentifiée sur /fr-CA/recipe-cards
+3. Phase B : Téléchargement anonyme & rendu officiel sur www2.makegoodfood.ca
+4. Phase C : Assemblage du livre PDF final (Goodfood_recettes.pdf)
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from src import assembler, finder, ocr_receipt, pdf_builder
 from src.utils import DATA_DIR, RECEIPTS_DIR, ensure_dirs
 
 MEALS_PATH = DATA_DIR / "meals.json"
+RECIPES_PATH = DATA_DIR / "recipes.json"
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 
 
@@ -53,16 +53,30 @@ def _pipeline() -> int:
             print("      ou fournis directement la liste des plats (data/meals.json ou --list).")
             return 1
 
-    # 2. Retrouver les recettes sur le site (avec multi-semaines et bloqueur de traqueurs)
+    # 2. Phase A : Découverte authentifiée sur /fr-CA/recipe-cards
     finder.run(headless=True)
 
-    # 3. Générer un PDF par recette
-    created_pdfs = pdf_builder.run()
+    # Vérification des résultats de la Phase A
+    recipes_data = json.loads(RECIPES_PATH.read_text(encoding="utf-8")) if RECIPES_PATH.exists() else {}
+    recipes = recipes_data.get("recipes", [])
+    missing = recipes_data.get("missing", [])
 
-    # 4. Assembler le PDF final avec page de garde
+    if not recipes:
+        print("\n❌ Échec : Aucune recette n'a pu être retrouvée dans l'historique Goodfood.", file=sys.stderr)
+        return 1
+
+    # 3. Phase B : Génération anonyme des PDF officiels 2 pages
+    created_pdfs = pdf_builder.run(headless=True)
+
+    # 4. Phase C : Assemblage du livre PDF final
     final = assembler.run(pdf_paths=created_pdfs)
 
     print(f"\n🎉 Terminé avec succès ! PDF final disponible : {final}")
+    
+    if missing:
+        print(f"\n⚠️  Attention : {len(missing)} plat(s) n'ont pas pu être associés : {', '.join(missing)}")
+        return 2
+
     return 0
 
 

@@ -1,43 +1,50 @@
 # ============================================================
-#  Configuration Goodfood — Optimisée Vitesse & Sécurité
+#  Configuration Goodfood — Architecture 2 Phases & URLs
 # ============================================================
 
 goodfood:
   base_url: "https://www.makegoodfood.ca"
-  login_url: "https://www.makegoodfood.ca/login"
-  orders_url: "https://www.makegoodfood.ca/fr-CA/account/orders"
-  recipes_url: "https://www.makegoodfood.ca/fr-CA/recipes"
-  timeout_ms: 25000
+  login_url: "https://www.makegoodfood.ca/fr-CA?loginModal=email&isNewUser="
+  recipe_cards_url: "https://www.makegoodfood.ca/fr-CA/recipe-cards"
+  catalog_url: "https://www.makegoodfood.ca/fr-CA/mealkit/recipes"
+  card_url_template: "https://www2.makegoodfood.ca/recipe-card/{sku}/{lang}"
+  timeout_ms: 30000
 
   login_selectors:
     email:
+      - "[data-testid='email-input-input']"
       - "input[type=email]"
       - "input[name=email]"
       - "input[autocomplete=email]"
     password:
+      - "[data-testid='password-input-input']"
       - "input[type=password]"
       - "input[name=password]"
     submit:
+      - "[data-testid='login-with-email-cta']"
       - "button[type=submit]"
-      - "input[type=submit]"
       - "button:has-text('Se connecter')"
+      - "button:has-text('Continuer')"
 
-  selectors:
-    recipe_link: "a[href*='/product/recipe/'], a[href*='/recipe/']"
-    recipe_title: "h1"
-    recipe_ingredients: "[class*='ingredient'], [class*='Ingredient']"
-    recipe_steps: "[class*='step'], [class*='instruction'], [class*='Step']"
-    recipe_image: "img[class*='recipe'], img[class*='hero']"
+  auth_probe:
+    url: "https://www.makegoodfood.ca/fr-CA/recipe-cards"
+    markers:
+      - "a[href*='www2.makegoodfood.ca/recipe-card/']"
+      - ":text('Bonjour')"
+      - ":text('Vos commandes')"
 
-# Seuil de similarité (0-1) pour matcher un plat de la facture
-# 0.60 = tolérant aux variantes de protéines et titres marketing, 0.80 = strict.
+# Rapprochement flou (rapidfuzz)
 matching:
   threshold: 0.60
+  strict_threshold: 0.85
+
+# Langue par défaut des fiches
+lang: "fr"
 
 # OCR (Tesseract)
 ocr:
   lang: "fra"
 
-# Délais optimisés entre les requêtes (en secondes)
+# Délais de politesse (en secondes)
 rate_limit:
   delay_seconds: 0.8
