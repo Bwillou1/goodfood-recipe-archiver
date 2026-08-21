@@ -1,9 +1,9 @@
 """Phase B : Rendu 100 % Anonyme et Génération Parallèle des PDF Officiels Goodfood.
 
-Optimisations P0/P1/P3/P5 :
+Optimisations Haute Vitesse :
 - Parallélisation asynchrone native via asyncio.gather et asyncio.Semaphore.
-- Noms de fichiers nettoyés en ASCII pur (slugify_ascii) sans caractères accentués fragiles.
-- Attente d'images HD plafonnée à 2,5s non bloquante.
+- Noms de fichiers nettoyés en ASCII pur (slugify_ascii).
+- Décodage d'images ultra-rapide non bloquant (max 1.2s).
 - Contexte anonyme partagé (zéro fuite de session vers www2).
 - Cache disque des fiches déjà générées (> 30 Ko).
 """
@@ -50,7 +50,7 @@ async def print_card_page_async(
             page = await context.new_page()
             await page.goto(card_url, wait_until="domcontentloaded", timeout=20000)
 
-            # Déclenchement rapide du scroll et décodage de toutes les images HD (max 2.5s)
+            # Déclenchement rapide du scroll et décodage de toutes les images HD (max 1.2s)
             js_script = """
             async () => {
                 window.scrollTo(0, document.body.scrollHeight);
@@ -60,7 +60,7 @@ async def print_card_page_async(
                     return new Promise(resolve => {
                         img.onload = resolve;
                         img.onerror = resolve;
-                        setTimeout(resolve, 2200);
+                        setTimeout(resolve, 1200);
                     });
                 }));
             }
@@ -106,7 +106,7 @@ async def print_card_page_async(
                     await page.close()
                 except Exception:
                     pass
-            delay = (2 ** attempt) + random.uniform(0.1, 0.4)
+            delay = (2 ** attempt) + random.uniform(0.1, 0.3)
             if attempt == max_retries:
                 temp_path.unlink(missing_ok=True)
                 raise RuntimeError(f"Échec d'impression pour {card_url} ({e})") from e
@@ -185,7 +185,7 @@ async def build_recipes_async(
 
 
 def build_single_sku(sku: str, lang: str = "fr", out_dir: Optional[Path] = None, headless: bool = True) -> Path:
-    """Téléchargement direct synchrone d'un SKU unique (3s)."""
+    """Téléchargement direct synchrone d'un SKU unique (2-3s)."""
     from playwright.sync_api import sync_playwright
     cfg = load_config()
     out_dir = out_dir or RECIPES_DIR
@@ -215,7 +215,7 @@ def build_single_sku(sku: str, lang: str = "fr", out_dir: Optional[Path] = None,
                 return new Promise(resolve => {
                     img.onload = resolve;
                     img.onerror = resolve;
-                    setTimeout(resolve, 2200);
+                    setTimeout(resolve, 1200);
                 });
             }));
         }''')
