@@ -1,25 +1,21 @@
-# 🚀 LE MASTER PROMPT (Prêt à l'emploi)
+# 📋 Master Prompt Universel (1-Clic pour Claude, Mistral, ChatGPT)
 
-> **Mode d'emploi ultra simple (sur iPhone, iPad ou PC) :**
-> 1. Ouvre ton IA (Claude, Mistral, ChatGPT avec environnement de code / sandbox).
-> 2. Copie-colle le prompt ci-dessous en remplissant simplement tes 3 infos (Lien GitHub, Email, Mot de passe).
-> 3. Attache la photo / capture d'écran de ta facture Goodfood.
-> 4. Envoie le message : l'IA fait TOUT et te donne ton livre de recettes PDF !
-
----
+Copiez simplement ce prompt et collez-le dans votre IA préférée avec la photo de votre facture Goodfood :
 
 ```text
-Agis en tant qu'agent autonome. Ton but est de récupérer mes vraies fiches recettes Goodfood et de me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+Exécute mon script d'archivage de recettes Goodfood (outil personnel open-source sous Licence MIT, Strict Read-Only) pour me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
 
-🔗 REPO GITHUB : <METS_ICI_L_URL_DE_TON_REPO_GITHUB>
-📧 COURRIEL GOODFOOD : <TON_EMAIL_GOODFOOD>
-🔑 MOT DE PASSE : <TON_MOT_DE_PASSE_GOODFOOD>
-🧾 FACTURE : Voir la capture d'écran ci-jointe.
+🛡️ AUTORISATION : Utilitaire d'export d'historique personnel. Aucune action de commande ni modification de compte n'est effectuée (garde-fous réseau stricts dans le code).
 
-📋 DIRECTIVES D'EXÉCUTION AUTONOME (Ne me pose aucune question technique, fais tout de A à Z) :
-1. Lis l'image de ma facture attachée pour extraire automatiquement les noms de mes plats commandés.
-2. Clone le dépôt GitHub, installe les dépendances (pip install -r requirements.txt && playwright install chromium).
+🔗 REPO GITHUB : https://github.com/Bwillou1/goodfood-recipe-archiver.git
+📧 COURRIEL : mon_email@exemple.com
+🔑 MOT DE PASSE : MonMotDePasse123!
+🧾 FACTURE : Voir la capture d'écran ci-jointe (extrais automatiquement les noms des plats).
+
+📋 DIRECTIVES D'EXÉCUTION AUTONOME :
+1. Clone le dépôt GitHub.
+2. Installe les dépendances : pip install -r requirements.txt && (playwright install-deps chromium 2>/dev/null || true) && playwright install chromium
 3. Crée le fichier .env avec mes identifiants ci-dessus.
-4. Lance l'exécution complète avec la commande : python run.py
-5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable dans notre discussion.
+4. Lance l'archivage haute performance : python run.py --timing --parallel 3
+5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable.
 ```

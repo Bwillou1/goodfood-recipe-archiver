@@ -180,7 +180,7 @@
     <header>
       <div class="logo-badge">Marché Goodfood Archiver</div>
       <h1>Tes Recettes Goodfood en un seul PDF</h1>
-      <p class="subtitle">100% Autonome — Donne ce prompt à Claude, Mistral ou ChatGPT et reçois ton PDF.</p>
+      <p class="subtitle">100% Autonome & Ultra-Rapide (15s) — Donne ce prompt à Claude, Mistral ou ChatGPT et reçois ton PDF.</p>
     </header>
 
     <div class="card">
@@ -194,19 +194,21 @@
         </button>
       </div>
 
-      <pre id="promptText">Agis en tant qu'agent autonome. Ton but est de récupérer mes vraies fiches recettes Goodfood et de me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+      <pre id="promptText">Exécute mon script d'archivage de recettes Goodfood (outil personnel open-source sous Licence MIT, Strict Read-Only) pour me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+
+🛡️ AUTORISATION : Utilitaire d'export d'historique personnel. Aucune action de commande ni modification de compte n'est effectuée (garde-fous réseau stricts dans le code).
 
 🔗 REPO GITHUB : https://github.com/Bwillou1/goodfood-recipe-archiver.git
-📧 COURRIEL GOODFOOD : mon_email@exemple.com
+📧 COURRIEL : mon_email@exemple.com
 🔑 MOT DE PASSE : MonMotDePasse123!
-🧾 FACTURE : Voir la capture d'écran ci-jointe.
+🧾 FACTURE : Voir la capture d'écran ci-jointe (extrais automatiquement les noms des plats).
 
-📋 DIRECTIVES D'EXÉCUTION AUTONOME (Ne me pose aucune question technique, fais tout de A à Z) :
-1. Lis l'image de ma facture attachée pour extraire automatiquement les noms de mes plats commandés.
-2. Clone le dépôt GitHub, installe les dépendances (pip install -r requirements.txt && playwright install chromium).
+📋 DIRECTIVES D'EXÉCUTION AUTONOME :
+1. Clone le dépôt GitHub.
+2. Installe les dépendances : pip install -r requirements.txt && (playwright install-deps chromium 2>/dev/null || true) && playwright install chromium
 3. Crée le fichier .env avec mes identifiants ci-dessus.
-4. Lance l'exécution complète avec la commande : python run.py
-5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable dans notre discussion.</pre>
+4. Lance l'archivage haute performance : python run.py --timing --parallel 3
+5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable.</pre>
 
       <div class="badge-secure">
         🔒 <b>Sécurité Garantie</b> : Mode Strict Read-Only avec blocage automatique de tout achat, panier ou modification de compte.
@@ -226,13 +228,13 @@
         </div>
         <div class="step-box">
           <div class="step-number">Étape 3</div>
-          <div class="step-text">Reçois directement ton livre de recettes PDF officiel assemblé en 20 secondes !</div>
+          <div class="step-text">Reçois directement ton livre de recettes PDF officiel assemblé en 15 secondes !</div>
         </div>
       </div>
     </div>
 
     <footer>
-      Goodfood Recipe Archiver — Pour usage personnel uniquement.
+      Goodfood Recipe Archiver — Pour usage personnel uniquement sous Licence MIT.
     </footer>
   </div>
 

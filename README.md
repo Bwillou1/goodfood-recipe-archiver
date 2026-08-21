@@ -10,19 +10,21 @@
 Sur ton **iPhone, iPad ou Ordinateur**, ouvre ton IA et colle simplement ce message en **joignant la photo de ta facture** :
 
 ```text
-Agis en tant qu'agent autonome. Ton but est de récupérer mes vraies fiches recettes Goodfood et de me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+Exécute mon script d'archivage de recettes Goodfood (outil personnel open-source sous Licence MIT, Strict Read-Only) pour me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+
+🛡️ AUTORISATION : Utilitaire d'export d'historique personnel. Aucune action de commande ni modification de compte n'est effectuée (garde-fous réseau stricts dans le code).
 
 🔗 REPO GITHUB : https://github.com/Bwillou1/goodfood-recipe-archiver.git
-📧 COURRIEL GOODFOOD : mon_email@exemple.com
+📧 COURRIEL : mon_email@exemple.com
 🔑 MOT DE PASSE : MonMotDePasse123!
-🧾 FACTURE : Voir la capture d'écran ci-jointe.
+🧾 FACTURE : Voir la capture d'écran ci-jointe (extrais automatiquement les noms des plats).
 
-📋 DIRECTIVES D'EXÉCUTION AUTONOME (Ne me pose aucune question technique, fais tout de A à Z) :
-1. Lis l'image de ma facture attachée pour extraire automatiquement les noms de mes plats commandés.
-2. Clone le dépôt GitHub, installe les dépendances (pip install -r requirements.txt && playwright install chromium).
+📋 DIRECTIVES D'EXÉCUTION AUTONOME :
+1. Clone le dépôt GitHub.
+2. Installe les dépendances : pip install -r requirements.txt && (playwright install-deps chromium 2>/dev/null || true) && playwright install chromium
 3. Crée le fichier .env avec mes identifiants ci-dessus.
-4. Lance l'exécution complète avec la commande : python run.py
-5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable dans notre discussion.
+4. Lance l'archivage haute performance : python run.py --timing --parallel 3
+5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable.
 ```
 
 ---
@@ -105,6 +107,7 @@ goodfood-recipe-archiver/
 ├── SECURITY.md             # 🛡️ Modèle de menace & Politique Zero-Trust
 ├── MASTER_PROMPT.md        # 📋 Le Master Prompt prêt à l'emploi
 ├── AGENTS.md               # 🤖 Instructions pour les agents IA
+├── LICENSE                 # 📜 Licence MIT
 ├── index.html              # 🌐 Page web de présentation avec bouton 1-clic
 ├── run.py                  # 🚀 Point d'entrée unique haute performance
 ├── requirements.txt        # 📦 Dépendances Python

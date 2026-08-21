@@ -17,8 +17,10 @@ OUTPUT_DIR = DATA_DIR / "output"
 CACHE_DIR = DATA_DIR / "cache"
 COOKIES_DIR = ROOT / "cookies"
 
-# Arguments Chromium optimisés pour démarrage rapide et faible consommation
+# Arguments Chromium optimisés pour démarrage rapide, conteneurs Docker et Sandboxes Linux
 CHROMIUM_PERF_ARGS = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
     "--disable-dev-shm-usage",
     "--disable-background-networking",
     "--disable-component-update",
