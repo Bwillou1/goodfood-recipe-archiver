@@ -1,24 +1,25 @@
-"""Garde-fous de sécurité stricts (Strict Read-Only, Anti-Achat & Anti-Altération).
+"""Garde-fous de sécurité stricts (Hardened Zero-Trust & Strict Read-Only).
 
-Ce module garantit une protection absolue contre toute modification ou dépense accidentelle :
-1. Strict Read-Only : Blocage de TOUTES les mutations vers des endpoints sensibles.
-2. Anti-Achat & Panier : Blocage de tout accès au panier, paiement, cartes de crédit, portefeuille.
-3. Anti-Altération Abonnements : Blocage de toute modification de forfait, saut/pause de semaine (skip/unskip).
-4. Protection Fidélité : Blocage de l'utilisation de crédits, points récompenses, coupons ou rabais.
-5. Protection Réputation : Blocage de l'envoi d'avis, notes, commentaires ou formulaires de feedback.
-6. Confidentialité & Vitesse : Blocage de tous les traqueurs comportementaux et enregistreurs de session
-   (Hotjar, Datadog, Segment, Google Analytics, FullStory, Meta, TikTok, etc.).
+Architecture Zero-Trust face aux agents IA autonomes :
+1. Filtrage intelligent des assets statiques : autorise systématiquement (.js, .css, .woff2, images, etc.)
+   pour garantir l'hydratation Next.js sans compromettre la sécurité.
+2. Blocage des navigations de document (resource_type == 'document') vers les pages sensibles
+   (panier, checkout, facturation, modification d'abonnement, gestion de carte de crédit).
+3. Blocage strict des mutations HTTP (POST, PUT, PATCH, DELETE) : seules les requêtes d'authentification
+   initiale et de recherche sont autorisées.
+4. Blocage total des traceurs tiers et enregistreurs de session comportementale (Hotjar, Datadog, Segment, etc.).
+5. Module autonome, auto-exécuté et non débrayable.
 """
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
-    from playwright.sync_api import Page, Route
+    from playwright.sync_api import BrowserContext, Page, Route
 
-# 🚫 1. URLs et Chemins Sensibles STRICTEMENT INTERDITS
+# 🚫 1. URLs et Chemins Sensibles STRICTEMENT INTERDITS (Panier, Abonnements, Fidélité, Avis, etc.)
 FORBIDDEN_URL_PATTERNS = [
     # --- Panier, Checkout & Paiement ---
     r"/checkout",
@@ -48,6 +49,7 @@ FORBIDDEN_URL_PATTERNS = [
     r"/mon-forfait",
     r"/subscriptions/cancel",
     r"/subscriptions/modify",
+    r"/subscriptions/pause",
     r"/orders/cancel",
     r"/orders/edit",
     r"/orders/modify",
@@ -160,8 +162,20 @@ ALLOWED_POST_PATTERNS = [
 ]
 ALLOWED_POST_REGEX = re.compile("|".join(ALLOWED_POST_PATTERNS), re.IGNORECASE)
 
+# Extensions de fichiers statiques autorisées sans restriction
+STATIC_EXTENSIONS = (
+    ".js", ".css", ".png", ".jpg", ".jpeg", ".webp",
+    ".svg", ".woff", ".woff2", ".ttf", ".eot", ".ico", ".map",
+)
 
-def is_url_allowed(url: str) -> bool:
+
+def is_static_asset(path: str) -> bool:
+    """Vérifie si la requête cible un fichier statique."""
+    clean_path = path.split("?")[0].lower()
+    return clean_path.endswith(STATIC_EXTENSIONS) or "/_next/static/" in clean_path
+
+
+def is_url_allowed(url: str, resource_type: str = "other") -> bool:
     """Vérifie si une URL est sûre et autorisée en lecture seule."""
     if not url:
         return True
@@ -169,10 +183,15 @@ def is_url_allowed(url: str) -> bool:
     parsed = urlparse(url)
     path = parsed.path.lower()
 
-    # Les fichiers statiques Next.js et assets web ne sont jamais des actions sensibles
-    if path.endswith((".js", ".css", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".woff2", ".ico")):
+    # 1. Règle intelligente : Fichiers statiques et hydratation Next.js toujours autorisés
+    if is_static_asset(path):
         return True
 
+    # 2. Blocage des navigations de document vers les pages sensibles
+    if resource_type == "document" and FORBIDDEN_REGEX.search(path):
+        return False
+
+    # 3. Blocage général des chemins sensibles
     if FORBIDDEN_REGEX.search(path):
         return False
         
@@ -190,7 +209,7 @@ def is_mutation_allowed(method: str, url: str) -> bool:
     if method in ("GET", "HEAD", "OPTIONS"):
         return True
     
-    # POST / PUT / PATCH / DELETE ne sont permis QUE pour le login ou la recherche
+    # POST / PUT / PATCH / DELETE ne sont permis QUE pour le login ou la recherche Algolia
     if ALLOWED_POST_REGEX.search(url):
         return True
         
@@ -202,20 +221,27 @@ def route_guardrail_interceptor(route: Route) -> None:
     request = route.request
     url = request.url
     method = request.method.upper()
+    resource_type = request.resource_type
 
-    # 1. Garde-fou n°1 : Blocage des URLs et sections sensibles
-    if not is_url_allowed(url):
-        print(f"🛑 [SÉCURITÉ BLOQUÉE] Tentative d'accès à une ressource sensible refusée : {url}")
+    # 1. Fichiers statiques : passage direct et ultra-rapide
+    parsed = urlparse(url)
+    if is_static_asset(parsed.path):
+        route.continue_()
+        return
+
+    # 2. Garde-fou n°1 : Blocage des URLs et navigations sensibles (Panier, Carte, Abonnements, etc.)
+    if not is_url_allowed(url, resource_type=resource_type):
+        print(f"🛑 [SÉCURITÉ BLOQUÉE] Tentative d'accès à une ressource sensible refusée ({resource_type}) : {url}")
         route.abort("blockedbyclient")
         return
 
-    # 2. Garde-fou n°2 : Blocage strict des mutations HTTP non autorisées (POST/PUT/DELETE/PATCH)
+    # 3. Garde-fou n°2 : Blocage strict des mutations HTTP non autorisées (POST/PUT/DELETE/PATCH)
     if not is_mutation_allowed(method, url):
         print(f"🛑 [MUTATION BLOQUÉE] Requête non autorisée {method} vers : {url}")
         route.abort("blockedbyclient")
         return
 
-    # 3. Garde-fou n°3 : Blocage silencieux des traceurs tiers & enregistreurs de session
+    # 4. Garde-fou n°3 : Blocage silencieux des traceurs tiers & enregistreurs de session
     if is_tracker(url):
         route.abort("blockedbyclient")
         return
@@ -223,6 +249,6 @@ def route_guardrail_interceptor(route: Route) -> None:
     route.continue_()
 
 
-def apply_guardrails(page: Page) -> None:
-    """Applique les garde-fous stricts sur une page Playwright."""
-    page.route("**/*", route_guardrail_interceptor)
+def apply_guardrails(target: Union[Page, BrowserContext]) -> None:
+    """Applique les garde-fous stricts sur une Page ou un BrowserContext Playwright."""
+    target.route("**/*", route_guardrail_interceptor)

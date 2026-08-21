@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  goodfood-archiver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: goodfood_archiver_sandbox
+    user: "1000:1000"
+    
+    # 🔒 Sécurité & Isolation Système Maximale
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: false
+    
+    # 📁 Montages de volumes : Code source en Lecture Seule (:ro), Données en Écriture
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./run.py:/app/run.py:ro
+      - ./data:/app/data:rw
+      - ./cookies:/app/cookies:rw
+      - ./.env:/app/.env:ro
+      
+    environment:
+      - PYTHONUNBUFFERED=1
+    
+    # Limites de ressources
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G

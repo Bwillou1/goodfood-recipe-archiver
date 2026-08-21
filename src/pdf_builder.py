@@ -1,10 +1,9 @@
 """Génération fidèle de la VRAIE fiche recette cartonnée Goodfood en PDF.
 
-Rendu officiel identique au carton papier Goodfood :
-- Format A4 Paysage (Landscape) officiel Goodfood (2 pages par fiche).
-- Page 1 : Titre officiel, photo HD grand format, ingrédients, temps de cuisson, logo Marché Goodfood.
-- Page 2 : Photos des étapes HD, instructions numérotées, case à cocher [ ], ustensiles requis.
-- Décodage complet garanti de toutes les images pour éliminer tout spinner "Loading...".
+Architecture de Sécurité & Séparation Stricte :
+- Phase 100 % Anonyme : Aucun cookie, identifiant ou session de compte n'est transmis à www2.makegoodfood.ca.
+- Contexte isolé et propre : Chaque rendu s'exécute dans un navigateur vierge sous garde-fous stricts.
+- Rendu officiel identique au carton papier Goodfood (Format A4 Paysage 2 pages).
 """
 from __future__ import annotations
 
@@ -13,9 +12,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from playwright.sync_api import sync_playwright
 from pypdf import PdfReader, PdfWriter
 
-from .auth import ensure_session
 from .guardrails import apply_guardrails
 from .utils import DATA_DIR, RECIPES_DIR, ensure_dirs
 
@@ -67,7 +66,6 @@ def print_official_card(page, card_url: str, out_path: Path) -> None:
     for idx, p in enumerate(reader.pages):
         text = (p.extract_text() or "").strip()
         imgs = len(p.images)
-        # Conserver la page si elle contient du texte ou des images
         if idx == 0 or len(text) > 20 or imgs > 0:
             writer.add_page(p)
 
@@ -84,9 +82,15 @@ def run(headless: bool = True) -> list[Path]:
         print("⚠️  Aucune recette à imprimer.")
         return []
 
-    pw, context = ensure_session(headless=headless)
+    # 🔒 Isolation totale : Contexte 100 % anonyme sans aucun cookie de session
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=headless)
+    context = browser.new_context(
+        viewport={"width": 1440, "height": 900},
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    )
+    apply_guardrails(context)
     page = context.new_page()
-    apply_guardrails(page)
 
     created: list[Path] = []
     try:
@@ -107,6 +111,7 @@ def run(headless: bool = True) -> list[Path]:
             print(f"    ✅ Fiche Goodfood 2-pages générée : {out.name}")
     finally:
         context.close()
+        browser.close()
         pw.stop()
 
     print(f"\n✅ {len(created)} fiche(s) officielle(s) générée(s) dans {RECIPES_DIR}")
