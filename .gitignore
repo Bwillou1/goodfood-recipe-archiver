@@ -24,3 +24,4 @@ data/recipes.json
 .idea/
 .vscode/
 .DS_Store
+data/cache/
