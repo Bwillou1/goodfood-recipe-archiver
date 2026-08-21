@@ -1,36 +1,38 @@
-"""Phase A : Découverte et indexation authentifiée des fiches recettes Goodfood.
+"""Phase A : Découverte et Indexation Authentifiée des Fiches Recettes Goodfood.
 
-Architecture 2 Phases (Recommandation Post-Mortem) :
-- Phase A (Authentifiée courte) : Navigation sur /fr-CA/recipe-cards (« Fiches recettes »).
-- Extraction par ancrage sur a[href*='www2.makegoodfood.ca/recipe-card/'] et déduction du titre.
-- Cache local dans data/cache/ordered_cards.json pour rejouabilité instantanée.
-- Rapprochement flou (rapidfuzz) avec journalisation systématique des scores.
+Optimisations Haute Performance (P0 / P3 / P5) :
+- Court-circuit P5 : Réutilisation du cache `ordered_cards.json` (< 24h) si tous les plats matchent (0.0s réseau).
+- Attentes ciblées Playwright natives (P0/P3) sans aucun sleep fixe.
+- Défilement intelligent stabilisé pour capturer l'ensemble des fiches sans temps mort.
+- Rapprochement flou rapide (rapidfuzz) avec journalisation systématique des scores.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from rapidfuzz import fuzz
 
-from .auth import ensure_session
-from .guardrails import apply_guardrails
+from .guardrails import apply_guardrails_async
 from .utils import (
-    DATA_DIR, RECIPES_DIR, ensure_dirs, load_config, normalize,
+    CACHE_DIR, DATA_DIR, RECIPES_DIR, ensure_dirs, load_config, normalize,
 )
+
+if TYPE_CHECKING:
+    from playwright.async_api import BrowserContext as AsyncContext
 
 MEALS_PATH = DATA_DIR / "meals.json"
 RECIPES_PATH = DATA_DIR / "recipes.json"
-CACHE_DIR = DATA_DIR / "cache"
 ORDERED_CARDS_CACHE = CACHE_DIR / "ordered_cards.json"
 
 
 def load_meals() -> list[str]:
     if not MEALS_PATH.exists():
-        raise FileNotFoundError(f"{MEALS_PATH} introuvable. Fournis la capture de facture ou lance : python -m src.cli extract")
+        raise FileNotFoundError(f"{MEALS_PATH} introuvable. Fournis la capture de facture ou lance avec --meals 'Plat1|Plat2'")
     return json.loads(MEALS_PATH.read_text(encoding="utf-8"))["meals"]
 
 
@@ -42,20 +44,30 @@ def extract_sku(url: str) -> Optional[str]:
     return None
 
 
-def best_match(query: str, candidates: list[dict], threshold: float = 0.60) -> Optional[tuple[dict, float]]:
-    """Retourne la meilleure fiche recette correspondante avec score explicite."""
+def best_match(
+    query: str,
+    candidates: list[Union[dict, tuple[str, str], list[str]]],
+    threshold: float = 0.60,
+) -> Optional[Any]:
+    """Retourne la meilleure fiche recette correspondante (supporte dicts ou tuples)."""
     q = normalize(query)
-    best_candidate: Optional[dict] = None
+    best_candidate: Any = None
     best_score: float = 0.0
+    is_tuple_format = False
 
     for cand in candidates:
-        title = cand.get("title", "")
+        if isinstance(cand, (tuple, list)):
+            is_tuple_format = True
+            title = cand[0]
+        elif isinstance(cand, dict):
+            title = cand.get("title", "")
+        else:
+            title = str(cand)
+
         norm_title = normalize(title)
-        
         ratio = fuzz.ratio(q, norm_title) / 100.0
         partial = fuzz.partial_ratio(q, norm_title) / 100.0
         token_score = fuzz.token_set_ratio(q, norm_title) / 100.0
-        
         score = max(ratio, partial * 0.9, token_score)
 
         if score > best_score:
@@ -63,32 +75,58 @@ def best_match(query: str, candidates: list[dict], threshold: float = 0.60) -> O
             best_candidate = cand
 
     if best_candidate and best_score >= threshold:
+        if is_tuple_format and isinstance(best_candidate, (tuple, list)):
+            return (best_candidate[0], best_candidate[1] if len(best_candidate) > 1 else "", best_score)
         return (best_candidate, best_score)
     return None
 
 
-def collect_ordered_cards(page, url: str) -> list[dict]:
-    """Extrait l'ensemble des fiches réellement commandées sur /fr-CA/recipe-cards."""
-    print(f"🌐 Phase A : Navigation sur l'historique officiel ({url})...")
-    page.goto(url, wait_until="domcontentloaded")
-    
-    # 1. Attente active de la présence des fiches
-    for _ in range(25):
-        if page.locator("a[href*='www2.makegoodfood.ca/recipe-card/']").count() > 0:
-            break
-        time.sleep(0.5)
+def get_cached_ordered_cards(ttl_hours: float = 24.0) -> Optional[list[dict]]:
+    """Retourne les fiches en cache si elles existent et sont fraîches."""
+    if not ORDERED_CARDS_CACHE.exists():
+        return None
+    try:
+        mtime = ORDERED_CARDS_CACHE.stat().st_mtime
+        age_hours = (time.time() - mtime) / 3600.0
+        if age_hours > ttl_hours:
+            return None
+        cards = json.loads(ORDERED_CARDS_CACHE.read_text(encoding="utf-8"))
+        if isinstance(cards, list) and len(cards) > 0:
+            return cards
+    except Exception:
+        return None
+    return None
 
-    # 2. Défilement dynamique jusqu'à stabilisation complète du compte
+
+async def collect_ordered_cards_async(page, url: str) -> list[dict]:
+    """Extrait l'ensemble des fiches commandées sur /fr-CA/recipe-cards de façon asynchrone."""
+    cfg = load_config()
+    politeness = cfg.get("rate_limit", {}).get("delay_seconds", 0.3)
+
+    print(f"🌐 Phase A : Navigation sur l'historique officiel ({url})...")
+    await page.goto(url, wait_until="domcontentloaded", timeout=cfg.get("goodfood", {}).get("timeout_ms", 25000))
+
+    # 1. Attente ciblée native de l'apparition des fiches
+    try:
+        await page.wait_for_selector(
+            "a[href*='www2.makegoodfood.ca/recipe-card/']",
+            state="attached",
+            timeout=15000,
+        )
+    except Exception:
+        return []
+
+    # 2. Défilement asynchrone stabilisé
     previous_count = -1
     for _ in range(15):
-        current_count = page.locator("a[href*='www2.makegoodfood.ca/recipe-card/']").count()
+        current_count = await page.locator("a[href*='www2.makegoodfood.ca/recipe-card/']").count()
         if current_count > 0 and current_count == previous_count:
             break
         previous_count = current_count
-        page.mouse.wheel(0, 5000)
-        time.sleep(0.4)
+        await page.mouse.wheel(0, 5000)
+        await asyncio.sleep(politeness)
 
-    # 3. Extraction structurée par ancrage sur l'URL www2
+    # 3. Extraction structurée par ancrage JavaScript
     js_extractor = """
     () => {
         const results = [];
@@ -124,7 +162,7 @@ def collect_ordered_cards(page, url: str) -> list[dict]:
         return results;
     }
     """
-    raw_cards = page.evaluate(js_extractor)
+    raw_cards = await page.evaluate(js_extractor)
     formatted = []
     for c in raw_cards:
         href = c["href"]
@@ -139,112 +177,139 @@ def collect_ordered_cards(page, url: str) -> list[dict]:
     return formatted
 
 
-def collect_catalog_cards(page, base_recipes_url: str) -> list[dict]:
-    """Secours : extraction depuis le catalogue commercial si /recipe-cards est vide."""
-    print(f"🌐 Secours : Exploration du catalogue commercial ({base_recipes_url})...")
-    page.goto(base_recipes_url, wait_until="domcontentloaded")
-    time.sleep(2)
-
-    toutes = page.locator(':text("Toutes les recettes"), a[href*="category=3MKMain"]').first
-    if toutes.count() > 0:
-        try:
-            toutes.click()
-            time.sleep(1)
-        except Exception:
-            pass
-
-    for _ in range(4):
-        page.mouse.wheel(0, 3000)
-        time.sleep(0.2)
-
-    cards = []
-    seen = set()
-    for l in page.locator('a[href*="/product/recipe/"], a[href*="/mealkit/recipes"]').all():
-        t = (l.inner_text() or "").strip().replace("\n", " ")
-        h = l.get_attribute("href") or ""
-        if h.startswith("/"):
-            h = "https://www.makegoodfood.ca" + h
-        sku = extract_sku(h) or ""
-        if sku and sku not in seen:
-            seen.add(sku)
-            cards.append({
-                "title": t or f"Recette {sku}",
-                "card_url": f"https://www2.makegoodfood.ca/recipe-card/{sku}/fr",
-                "sku": sku,
-                "date": "",
-            })
-    return cards
-
-
-def run(dump: bool = False, headless: bool = True) -> Path:
+async def find_recipes_async(
+    context: AsyncContext,
+    meals: Optional[list[str]] = None,
+    refresh: bool = False,
+) -> tuple[list[dict], list[str]]:
+    """Phase A Asynchrone : indexation et rapprochement flou avec court-circuit cache."""
     ensure_dirs()
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cfg = load_config()
-    meals = load_meals()
+    target_meals = meals or load_meals()
+    threshold = cfg.get("matching", {}).get("threshold", 0.60)
+    strict_threshold = cfg.get("matching", {}).get("strict_threshold", 0.85)
+    cache_ttl = cfg.get("performance", {}).get("cache_ttl_hours", 24)
 
-    pw, context = ensure_session(headless=headless)
-    page = context.new_page()
-    apply_guardrails(page)
+    # --- Court-circuit P5 : Vérification du Cache ---
+    ordered_cards = None
+    if not refresh:
+        cached = get_cached_ordered_cards(ttl_hours=cache_ttl)
+        if cached:
+            # Vérifier si tous les plats matchent dans le cache
+            all_matched = True
+            for m in target_meals:
+                if best_match(m, cached, threshold=threshold) is None:
+                    all_matched = False
+                    break
+            if all_matched:
+                print(f"⚡ [CACHE] {len(cached)} fiches réutilisées depuis le cache local (0.0s réseau).")
+                ordered_cards = cached
 
+    # Si pas de cache valide ou refresh demandé, exécuter la découverte réseau
+    if ordered_cards is None:
+        page = await context.new_page()
+        try:
+            recipe_cards_url = cfg.get("goodfood", {}).get(
+                "recipe_cards_url", "https://www.makegoodfood.ca/fr-CA/recipe-cards"
+            )
+            ordered_cards = await collect_ordered_cards_async(page, recipe_cards_url)
+            print(f"📚 {len(ordered_cards)} fiches recettes officielles indexées.")
+            ORDERED_CARDS_CACHE.write_text(
+                json.dumps(ordered_cards, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        finally:
+            await page.close()
+
+    # --- Rapprochement flou (Matching) ---
     recipes: list[dict] = []
     missing: list[str] = []
 
-    try:
-        recipe_cards_url = cfg.get("goodfood", {}).get(
-            "recipe_cards_url", "https://www.makegoodfood.ca/fr-CA/recipe-cards"
-        )
-        ordered_cards = collect_ordered_cards(page, recipe_cards_url)
+    for meal in target_meals:
+        match_res = best_match(meal, ordered_cards, threshold=threshold)
+        if match_res is None:
+            print(f"   ❌ « {meal} » introuvable dans l'historique.")
+            missing.append(meal)
+            continue
 
-        if not ordered_cards:
-            print("⚠️  Aucune fiche trouvée dans l'historique, bascule sur le catalogue...")
-            catalog_url = cfg.get("goodfood", {}).get("catalog_url", "https://www.makegoodfood.ca/fr-CA/mealkit/recipes")
-            ordered_cards = collect_catalog_cards(page, catalog_url)
+        candidate, score = match_res
+        title = candidate["title"] if isinstance(candidate, dict) else candidate[0]
+        sku = candidate.get("sku", "") if isinstance(candidate, dict) else extract_sku(candidate[1]) or ""
+        card_url = candidate.get("card_url", "") if isinstance(candidate, dict) else candidate[1]
 
-        print(f"\n📚 {len(ordered_cards)} fiches recettes officielles indexées.")
+        alert = " (⚠️ Rapprochement modéré)" if score < strict_threshold else ""
+        print(f"   ✅ Trouvé [Score: {score:.2f}]{alert} : {title}")
+        print(f"      🏷️  SKU : {sku} | 🖨️  {card_url}")
 
-        # Sauvegarde du cache
-        ORDERED_CARDS_CACHE.write_text(
-            json.dumps(ordered_cards, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-
-        threshold = cfg.get("matching", {}).get("threshold", 0.60)
-        strict_threshold = cfg.get("matching", {}).get("strict_threshold", 0.85)
-
-        for meal in meals:
-            print(f"\n🔎 Rapprochement pour : « {meal} »")
-            match_res = best_match(meal, ordered_cards, threshold=threshold)
-            
-            if match_res is None:
-                print(f"   ❌ Introuvable dans l'historique (seuil {threshold}).")
-                missing.append(meal)
-                continue
-
-            candidate, score = match_res
-            title = candidate["title"]
-            sku = candidate["sku"]
-            card_url = candidate["card_url"]
-
-            alert = " (⚠️ Rapprochement modéré)" if score < strict_threshold else ""
-            print(f"   ✅ Trouvé [Score: {score:.2f}]{alert} : {title}")
-            print(f"      🏷️  SKU : {sku}")
-            print(f"      🖨️  Fiche officielle : {card_url}")
-
-            recipes.append({
-                "title": title,
-                "card_url": card_url,
-                "sku": sku,
-                "matched_meal": meal,
-                "score": score,
-            })
-    finally:
-        context.close()
-        pw.stop()
+        recipes.append({
+            "title": title,
+            "card_url": card_url,
+            "sku": sku,
+            "matched_meal": meal,
+            "score": score,
+        })
 
     RECIPES_PATH.write_text(
         json.dumps({"recipes": recipes, "missing": missing}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"\n💾 {len(recipes)} recettes associées prêtes pour la Phase B.")
-    if missing:
-        print(f"⚠️  {len(missing)} plat(s) introuvable(s) : {', '.join(missing)}")
+    return recipes, missing
+
+
+# --- Wrapper Synchrone ---
+
+def run(dump: bool = False, headless: bool = True, refresh: bool = False) -> Path:
+    """Point d'entrée synchrone pour compatibilité."""
+    from .auth import ensure_session
+    ensure_dirs()
+    cfg = load_config()
+    meals = load_meals()
+    threshold = cfg.get("matching", {}).get("threshold", 0.60)
+    cache_ttl = cfg.get("performance", {}).get("cache_ttl_hours", 24)
+
+    # Court-circuit cache
+    if not refresh:
+        cached = get_cached_ordered_cards(ttl_hours=cache_ttl)
+        if cached:
+            all_matched = all(best_match(m, cached, threshold=threshold) is not None for m in meals)
+            if all_matched:
+                print(f"⚡ [CACHE] {len(cached)} fiches réutilisées depuis le cache.")
+                recipes = []
+                missing = []
+                for m in meals:
+                    res = best_match(m, cached, threshold=threshold)
+                    if res:
+                        c, s = res
+                        recipes.append({
+                            "title": c["title"], "card_url": c["card_url"],
+                            "sku": c["sku"], "matched_meal": m, "score": s
+                        })
+                    else:
+                        missing.append(m)
+                RECIPES_PATH.write_text(json.dumps({"recipes": recipes, "missing": missing}, ensure_ascii=False, indent=2), encoding="utf-8")
+                return RECIPES_PATH
+
+    pw, context = ensure_session(headless=headless)
+    page = context.new_page()
+    try:
+        url = cfg.get("goodfood", {}).get("recipe_cards_url", "https://www.makegoodfood.ca/fr-CA/recipe-cards")
+        page.goto(url, wait_until="domcontentloaded")
+        page.wait_for_selector("a[href*='www2.makegoodfood.ca/recipe-card/']", timeout=15000)
+        ordered_cards = asyncio.run(collect_ordered_cards_async(page, url))
+        ORDERED_CARDS_CACHE.write_text(json.dumps(ordered_cards, ensure_ascii=False, indent=2), encoding="utf-8")
+        recipes = []
+        missing = []
+        for m in meals:
+            match_res = best_match(m, ordered_cards, threshold=threshold)
+            if match_res:
+                c, s = match_res
+                title = c["title"] if isinstance(c, dict) else c[0]
+                url_c = c["card_url"] if isinstance(c, dict) else c[1]
+                sku_c = c.get("sku", "") if isinstance(c, dict) else extract_sku(url_c) or ""
+                recipes.append({"title": title, "card_url": url_c, "sku": sku_c, "matched_meal": m, "score": s})
+            else:
+                missing.append(m)
+        RECIPES_PATH.write_text(json.dumps({"recipes": recipes, "missing": missing}, ensure_ascii=False, indent=2), encoding="utf-8")
+    finally:
+        context.close()
+        pw.stop()
     return RECIPES_PATH

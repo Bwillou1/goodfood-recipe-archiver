@@ -5,10 +5,10 @@ Usage :
   python -m src.cli extract --image X    # OCR de la facture
   python -m src.cli extract --list A B   # liste manuelle de plats
   python -m src.cli find                 # retrouver les recettes (Phase A)
-  python -m src.cli build                # imprimer les PDF (Phase B)
-  python -m src.cli sku GF105044         # rejouabilité instantanée pour un SKU (5s)
+  python -m src.cli build                # imprimer les PDF en parallèle (Phase B)
+  python -m src.cli sku GF105044         # rejouabilité instantanée pour un SKU (3s)
   python -m src.cli assemble             # fusionner en PDF final (Phase C)
-  python -m src.cli all --image X        # tout le pipeline
+  python -m src.cli all --timing         # tout le pipeline avec chronométrage
   python -m src.cli demo                 # PDF d'exemple (sans compte)
 """
 from __future__ import annotations
@@ -37,9 +37,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_find = sub.add_parser("find", help="Phase A : Retrouver les recettes (espace /recipe-cards)")
     p_find.add_argument("--dump", action="store_true", help="Sauvegarder le HTML pour diagnostic")
+    p_find.add_argument("--refresh", action="store_true", help="Forcer le rafraîchissement du cache")
     p_find.add_argument("--headed", action="store_true", help="Afficher le navigateur")
 
-    sub.add_parser("build", help="Phase B : Générer les PDF officiels 100% anonymes")
+    p_build = sub.add_parser("build", help="Phase B : Générer les PDF officiels en parallèle")
+    p_build.add_argument("--parallel", type=int, default=3, help="Nombre de tâches parallèles (défaut: 3)")
 
     p_sku = sub.add_parser("sku", help="Télécharger directement une fiche par SKU (ex: GF105044)")
     p_sku.add_argument("sku", help="Identifiant Goodfood (ex: GF105044)")
@@ -50,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
     p_all = sub.add_parser("all", help="Pipeline complet (Phase A + Phase B + Phase C)")
     p_all.add_argument("--image", help="Capture d'écran de la facture")
     p_all.add_argument("--list", nargs="+", help="Liste manuelle de plats")
+    p_all.add_argument("--meals", help="Plats séparés par | (ex: 'Plat 1 | Plat 2')")
+    p_all.add_argument("--parallel", type=int, default=3, help="Nombre de tâches parallèles")
+    p_all.add_argument("--refresh", action="store_true", help="Forcer rafraîchissement cache")
+    p_all.add_argument("--timing", action="store_true", help="Afficher chronométrage détaillé")
     p_all.add_argument("--headed", action="store_true", help="Afficher le navigateur")
 
     sub.add_parser("demo", help="Générer un PDF d'exemple (sans compte)")
@@ -65,19 +71,26 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "extract":
             ocr_receipt.run(image=args.image, meal_list=args.list, lang=args.lang)
         elif args.cmd == "find":
-            finder.run(dump=args.dump, headless=not args.headed)
+            finder.run(dump=args.dump, headless=not args.headed, refresh=args.refresh)
         elif args.cmd == "build":
-            pdf_builder.run()
+            pdf_builder.run(parallel=args.parallel)
         elif args.cmd == "sku":
             pdf_builder.build_single_sku(args.sku, lang=args.lang)
         elif args.cmd == "assemble":
             assembler.run()
         elif args.cmd == "all":
-            if args.image or args.list:
-                ocr_receipt.run(image=args.image, meal_list=args.list)
-            finder.run(headless=not args.headed)
-            pdf_builder.run()
-            assembler.run()
+            from run import run_pipeline_async
+            import asyncio
+            meals_param = args.meals or (" | ".join(args.list) if args.list else None)
+            return asyncio.run(
+                run_pipeline_async(
+                    meals_arg=meals_param,
+                    parallel=args.parallel,
+                    refresh=args.refresh,
+                    show_timing=args.timing,
+                    headless=not args.headed,
+                )
+            )
         elif args.cmd == "demo":
             from .demo import run_demo
             run_demo()

@@ -1,5 +1,5 @@
 # ============================================================
-#  Configuration Goodfood — Architecture 2 Phases & URLs
+#  Configuration Goodfood — Haute Performance & Sécurité
 # ============================================================
 
 goodfood:
@@ -8,7 +8,7 @@ goodfood:
   recipe_cards_url: "https://www.makegoodfood.ca/fr-CA/recipe-cards"
   catalog_url: "https://www.makegoodfood.ca/fr-CA/mealkit/recipes"
   card_url_template: "https://www2.makegoodfood.ca/recipe-card/{sku}/{lang}"
-  timeout_ms: 30000
+  timeout_ms: 25000
 
   login_selectors:
     email:
@@ -38,6 +38,11 @@ matching:
   threshold: 0.60
   strict_threshold: 0.85
 
+# Performance & Concurrence
+performance:
+  parallel: 3
+  cache_ttl_hours: 24
+
 # Langue par défaut des fiches
 lang: "fr"
 
@@ -45,6 +50,6 @@ lang: "fr"
 ocr:
   lang: "fra"
 
-# Délais de politesse (en secondes)
+# Délai de politesse configurable (en secondes)
 rate_limit:
-  delay_seconds: 0.8
+  delay_seconds: 0.3

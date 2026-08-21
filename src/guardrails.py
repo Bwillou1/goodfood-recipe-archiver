@@ -1,23 +1,22 @@
-"""Garde-fous de sécurité stricts (Hardened Zero-Trust & Strict Read-Only).
+"""Garde-fous de sécurité stricts (Hardened Zero-Trust, Anti-Achat & Anti-Traceurs).
 
-Architecture Zero-Trust face aux agents IA autonomes :
-1. Filtrage intelligent des assets statiques : autorise systématiquement (.js, .css, .woff2, images, etc.)
-   pour garantir l'hydratation Next.js sans compromettre la sécurité.
-2. Blocage des navigations de document (resource_type == 'document') vers les pages sensibles
-   (panier, checkout, facturation, modification d'abonnement, gestion de carte de crédit).
-3. Blocage strict des mutations HTTP (POST, PUT, PATCH, DELETE) : seules les requêtes d'authentification
-   initiale et de recherche sont autorisées.
-4. Blocage total des traceurs tiers et enregistreurs de session comportementale (Hotjar, Datadog, Segment, etc.).
-5. Module autonome, auto-exécuté et non débrayable.
+Optimisation Haute Performance (P4) :
+- Filtrage rapide par domaines bloqués (traceurs, pixels publicitaires, APM).
+- Whitelist prioritaire des fichiers statiques et domaines CDN Goodfood pour zéro latence d'hydratation.
+- Préservation intégrale de toutes les interdictions strictes (Panier, Checkout, Abonnements, Mutations HTTP).
+- Support unifié Synchrone et Asynchrone Playwright.
 """
 from __future__ import annotations
 
+import asyncio
+import inspect
 import re
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Union
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
-    from playwright.sync_api import BrowserContext, Page, Route
+    from playwright.async_api import BrowserContext as AsyncContext, Page as AsyncPage, Route as AsyncRoute
+    from playwright.sync_api import BrowserContext as SyncContext, Page as SyncPage, Route as SyncRoute
 
 # 🚫 1. URLs et Chemins Sensibles STRICTEMENT INTERDITS (Panier, Abonnements, Fidélité, Avis, etc.)
 FORBIDDEN_URL_PATTERNS = [
@@ -105,9 +104,8 @@ FORBIDDEN_URL_PATTERNS = [
     r"/api/.*/feedback",
 ]
 
-# 🚫 2. Traceurs tiers, enregistreurs de session et pixels analytiques à bloquer
+# 🚫 2. Traceurs tiers, enregistreurs de session et pixels publicitaires
 BLOCKED_TRACKERS = [
-    # Outils d'enregistrement de session & APM
     "hotjar.com",
     "hotjar.io",
     "datadoghq.com",
@@ -125,18 +123,15 @@ BLOCKED_TRACKERS = [
     "newrelic.com",
     "nr-data.net",
     "visualwebsiteoptimizer.com",
-
-    # Google Analytics, Ads & Tag Manager
     "google-analytics.com",
     "analytics.google.com",
     "googletagmanager.com",
     "googleadservices.com",
     "doubleclick.net",
-
-    # Réseaux sociaux & traceurs publicitaires
     "bat.bing.com",
     "connect.facebook.net",
     "analytics.tiktok.com",
+    "tiktokw.us",
     "snapchat.com",
     "ct.pinterest.com",
     "px.ads.linkedin.com",
@@ -146,9 +141,12 @@ BLOCKED_TRACKERS = [
     "adnxs.com",
     "casalemedia.com",
     "adsrvr.org",
+    "mczbf.com",
+    "justone.ai",
 ]
 
 FORBIDDEN_REGEX = re.compile("|".join(FORBIDDEN_URL_PATTERNS), re.IGNORECASE)
+BLOCKED_TRACKERS_REGEX = re.compile("|".join(re.escape(t) for t in BLOCKED_TRACKERS), re.IGNORECASE)
 
 # Endpoints autorisés pour requêtes POST (Authentification et Recherche Algolia uniquement)
 ALLOWED_POST_PATTERNS = [
@@ -183,7 +181,7 @@ def is_url_allowed(url: str, resource_type: str = "other") -> bool:
     parsed = urlparse(url)
     path = parsed.path.lower()
 
-    # 1. Règle intelligente : Fichiers statiques et hydratation Next.js toujours autorisés
+    # 1. Règle intelligente : Fichiers statiques toujours autorisés
     if is_static_asset(path):
         return True
 
@@ -200,8 +198,7 @@ def is_url_allowed(url: str, resource_type: str = "other") -> bool:
 
 def is_tracker(url: str) -> bool:
     """Détecte les pixels publicitaires et enregistreurs de session tiers."""
-    url_lower = url.lower()
-    return any(domain in url_lower for domain in BLOCKED_TRACKERS)
+    return bool(BLOCKED_TRACKERS_REGEX.search(url.lower()))
 
 
 def is_mutation_allowed(method: str, url: str) -> bool:
@@ -216,39 +213,64 @@ def is_mutation_allowed(method: str, url: str) -> bool:
     return False
 
 
-def route_guardrail_interceptor(route: Route) -> None:
-    """Intercepteur réseau Playwright strict : bloque toute action sensible ou traceur."""
-    request = route.request
-    url = request.url
-    method = request.method.upper()
-    resource_type = request.resource_type
-
-    # 1. Fichiers statiques : passage direct et ultra-rapide
+def _check_route(url: str, method: str, resource_type: str) -> tuple[bool, str]:
+    """Retourne (allowed, reason) pour le routage."""
     parsed = urlparse(url)
+    
+    # 1. Fichiers statiques autorisés immédiatement
     if is_static_asset(parsed.path):
-        route.continue_()
-        return
+        return True, "static"
 
-    # 2. Garde-fou n°1 : Blocage des URLs et navigations sensibles (Panier, Carte, Abonnements, etc.)
-    if not is_url_allowed(url, resource_type=resource_type):
-        print(f"🛑 [SÉCURITÉ BLOQUÉE] Tentative d'accès à une ressource sensible refusée ({resource_type}) : {url}")
-        route.abort("blockedbyclient")
-        return
-
-    # 3. Garde-fou n°2 : Blocage strict des mutations HTTP non autorisées (POST/PUT/DELETE/PATCH)
-    if not is_mutation_allowed(method, url):
-        print(f"🛑 [MUTATION BLOQUÉE] Requête non autorisée {method} vers : {url}")
-        route.abort("blockedbyclient")
-        return
-
-    # 4. Garde-fou n°3 : Blocage silencieux des traceurs tiers & enregistreurs de session
+    # 2. Garde-fou traceurs (abort silencieux et immédiat)
     if is_tracker(url):
+        return False, "tracker"
+
+    # 3. Garde-fou URLs sensibles
+    if not is_url_allowed(url, resource_type=resource_type):
+        return False, f"sensitive_url ({resource_type})"
+
+    # 4. Garde-fou mutations HTTP
+    if not is_mutation_allowed(method, url):
+        return False, f"mutation_{method}"
+
+    return True, "ok"
+
+
+def sync_route_guardrail_interceptor(route: SyncRoute) -> None:
+    """Intercepteur pour Playwright synchrone."""
+    req = route.request
+    allowed, reason = _check_route(req.url, req.method.upper(), req.resource_type)
+    if allowed:
+        route.continue_()
+    else:
+        if reason.startswith("sensitive") or reason.startswith("mutation"):
+            print(f"🛑 [SÉCURITÉ BLOQUÉE] {req.method} vers {req.url} ({reason})")
         route.abort("blockedbyclient")
-        return
-
-    route.continue_()
 
 
-def apply_guardrails(target: Union[Page, BrowserContext]) -> None:
-    """Applique les garde-fous stricts sur une Page ou un BrowserContext Playwright."""
-    target.route("**/*", route_guardrail_interceptor)
+async def async_route_guardrail_interceptor(route: AsyncRoute) -> None:
+    """Intercepteur pour Playwright asynchrone."""
+    req = route.request
+    allowed, reason = _check_route(req.url, req.method.upper(), req.resource_type)
+    if allowed:
+        await route.continue_()
+    else:
+        if reason.startswith("sensitive") or reason.startswith("mutation"):
+            print(f"🛑 [SÉCURITÉ BLOQUÉE] {req.method} vers {req.url} ({reason})")
+        await route.abort("blockedbyclient")
+
+
+def apply_guardrails(target: Any) -> None:
+    """Applique les garde-fous stricts sur une Page ou un BrowserContext (sync ou async)."""
+    # Détection si target est async ou sync
+    if hasattr(target, "route") and inspect.iscoroutinefunction(target.route):
+        # Async target
+        asyncio.create_task(target.route("**/*", async_route_guardrail_interceptor))
+    elif hasattr(target, "route"):
+        # Sync target
+        target.route("**/*", sync_route_guardrail_interceptor)
+
+
+async def apply_guardrails_async(target: Any) -> None:
+    """Applique explicitement les garde-fous sur un objet async Playwright."""
+    await target.route("**/*", async_route_guardrail_interceptor)
