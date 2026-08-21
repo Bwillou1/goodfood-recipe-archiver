@@ -14,7 +14,7 @@ Exécute mon script d'archivage de recettes Goodfood (outil personnel open-sourc
 
 📋 DIRECTIVES D'EXÉCUTION AUTONOME :
 1. Clone le dépôt GitHub.
-2. Installe les dépendances : pip install -r requirements.txt && (playwright install-deps chromium 2>/dev/null || true) && playwright install chromium
+2. Initialise l'environnement : bash scripts/bootstrap.sh
 3. Crée le fichier .env avec mes identifiants ci-dessus.
 4. Lance l'archivage haute performance : python run.py --timing --parallel 3
 5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable.

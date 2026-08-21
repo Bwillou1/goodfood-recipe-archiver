@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Point d'entrée UNIQUE et Haute Performance pour goodfood-recipe-archiver.
 
-Optimisations Globales :
-- P1 : Phase B parallèle & asynchrone (asyncio.gather + Semaphore).
-- P2 : Navigateur Chromium unique pour tout le cycle de vie.
-- P3 : Attentes ciblées Playwright natives (aucun time.sleep aveugle).
-- P5 : Court-circuit du cache Phase A (< 24h) et validation locale de session.
-- P6 : Flags --meals, --parallel, --refresh, --timing avec rapport d'exécution détaillé.
+Optimisations & DX :
+- Lancement Chromium sécurisé avec diagnostic clair si dépendances système manquantes.
+- Récapitulatif final en 1 ligne : OK N/N fiches | Xs | chemin_du_pdf
+- Flags : --meals, --parallel, --refresh, --timing, --out, --headed
+- Codes de retour stricts : 0 (succès), 2 (omission partielle), 1 (erreur).
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -36,23 +36,28 @@ async def run_pipeline_async(
     refresh: bool = False,
     show_timing: bool = False,
     headless: bool = True,
+    out_path: Optional[Path] = None,
+    dump: bool = False,
 ) -> int:
     ensure_dirs()
     cfg = load_config()
     timings: dict[str, float] = {}
     t_global_start = time.perf_counter()
 
-    # 1. Résolution des plats (Argument direct, OCR ou data/meals.json)
+    # 1. Résolution des plats (Argument direct, meals.json ou OCR)
     target_meals: list[str] = []
     if meals_arg:
-        # Séparateurs : pipe |, virgule ,, ou point-virgule ;
-        import re
         target_meals = [m.strip() for m in re.split(r"[|,;]", meals_arg) if m.strip()]
         MEALS_PATH.write_text(json.dumps({"meals": target_meals}, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"📋 {len(target_meals)} plat(s) spécifié(s) via --meals.")
     elif MEALS_PATH.exists():
-        target_meals = json.loads(MEALS_PATH.read_text(encoding="utf-8")).get("meals", [])
-    else:
+        try:
+            data = json.loads(MEALS_PATH.read_text(encoding="utf-8"))
+            target_meals = data.get("meals", [])
+        except Exception:
+            target_meals = []
+    
+    if not target_meals:
         images = [p for p in RECEIPTS_DIR.iterdir() if p.suffix.lower() in IMG_EXTS]
         if images:
             t_ocr = time.perf_counter()
@@ -61,63 +66,79 @@ async def run_pipeline_async(
             timings["OCR Facture"] = time.perf_counter() - t_ocr
             target_meals = json.loads(MEALS_PATH.read_text(encoding="utf-8")).get("meals", [])
         else:
-            print("\n❌ Aucune facture dans data/receipts/ et aucun data/meals.json.", file=sys.stderr)
-            print("   → Passe les plats avec --meals 'Plat 1 | Plat 2' ou dépose une image dans data/receipts/.", file=sys.stderr)
+            print("\n❌ Aucun plat spécifié et aucune facture trouvée dans data/receipts/.", file=sys.stderr)
+            print("   → Passe les plats avec --meals 'Plat 1 | Plat 2' ou dépose une capture dans data/receipts/.", file=sys.stderr)
             return 1
 
     if not target_meals:
         print("\n❌ Aucun plat à rechercher.", file=sys.stderr)
         return 1
 
-    # 2. Lancement du Navigateur Unique (P2)
-    async with async_playwright() as pw:
-        t_browser = time.perf_counter()
-        browser = await pw.chromium.launch(
-            headless=headless,
-            args=CHROMIUM_PERF_ARGS,
-        )
-        timings["Lancement Chromium"] = time.perf_counter() - t_browser
+    # 2. Lancement du Navigateur Unique
+    try:
+        async with async_playwright() as pw:
+            t_browser = time.perf_counter()
+            try:
+                browser = await pw.chromium.launch(
+                    headless=headless,
+                    args=CHROMIUM_PERF_ARGS,
+                )
+            except Exception as e:
+                err_str = str(e)
+                if "libnspr4" in err_str or "shared libraries" in err_str or "No usable sandbox" in err_str:
+                    print("\n❌ ERREUR DE DÉPENDANCES CHROMIUM :", file=sys.stderr)
+                    print("   Il manque des bibliothèques système Linux dans cet environnement.", file=sys.stderr)
+                    print("   👉 Solution rapide : exécute `bash scripts/bootstrap.sh`", file=sys.stderr)
+                    return 1
+                raise
 
-        # 3. Phase A : Authentification & Indexation (avec court-circuit P5)
-        t_phase_a = time.perf_counter()
-        _, auth_context = await auth.ensure_session_async(browser=browser, headless=headless)
-        recipes, missing = await finder.find_recipes_async(
-            context=auth_context,
-            meals=target_meals,
-            refresh=refresh,
-        )
-        await auth_context.close()
-        timings["Phase A (Découverte & Matching)"] = time.perf_counter() - t_phase_a
+            timings["Lancement Chromium"] = time.perf_counter() - t_browser
 
-        if not recipes:
+            # 3. Phase A : Authentification & Indexation
+            t_phase_a = time.perf_counter()
+            _, auth_context = await auth.ensure_session_async(browser=browser, headless=headless)
+            recipes, missing = await finder.find_recipes_async(
+                context=auth_context,
+                meals=target_meals,
+                refresh=refresh,
+                dump=dump,
+            )
+            await auth_context.close()
+            timings["Phase A (Découverte & Matching)"] = time.perf_counter() - t_phase_a
+
+            if not recipes:
+                await browser.close()
+                print("\n❌ Échec : Aucune recette n'a pu être retrouvée dans l'historique Goodfood.", file=sys.stderr)
+                return 1
+
+            # 4. Phase B : Génération Parallèle 100 % Anonyme
+            t_phase_b = time.perf_counter()
+            created_pdfs, recipe_timings = await pdf_builder.build_recipes_async(
+                browser=browser,
+                recipes=recipes,
+                parallel=parallel,
+            )
+            timings["Phase B (Rendu PDF //)"] = time.perf_counter() - t_phase_b
+            for r_name, r_dt in recipe_timings.items():
+                timings[f"  └─ {r_name[:30]}"] = r_dt
+
             await browser.close()
-            print("\n❌ Échec : Aucune recette n'a pu être retrouvée dans l'historique Goodfood.", file=sys.stderr)
-            return 1
 
-        # 4. Phase B : Génération Parallèle 100 % Anonyme (P1)
-        t_phase_b = time.perf_counter()
-        created_pdfs, recipe_timings = await pdf_builder.build_recipes_async(
-            browser=browser,
-            recipes=recipes,
-            parallel=parallel,
-        )
-        timings["Phase B (Rendu PDF //)"] = time.perf_counter() - t_phase_b
-        for r_name, r_dt in recipe_timings.items():
-            timings[f"  └─ {r_name[:30]}"] = r_dt
-
-        await browser.close()
+    except Exception as e:
+        print(f"\n❌ Erreur pendant l'exécution : {e}", file=sys.stderr)
+        return 1
 
     # 5. Phase C : Assemblage du Livre PDF Final (Landscape A4)
     t_phase_c = time.perf_counter()
-    final_pdf = assembler.run(pdf_paths=created_pdfs)
+    final_pdf = assembler.run(pdf_paths=created_pdfs, out_path=out_path)
     timings["Phase C (Assemblage PDF final)"] = time.perf_counter() - t_phase_c
 
     t_total = time.perf_counter() - t_global_start
     timings["TOTAL WALL-CLOCK"] = t_total
 
-    print(f"\n🎉 Terminé avec succès ! PDF final disponible : {final_pdf}")
+    # Récapitulatif clair en 1 ligne (P2)
+    print(f"\nOK {len(created_pdfs)}/{len(target_meals)} fiches | {t_total:.1f}s | {final_pdf}")
 
-    # Affichage du rapport de performance si --timing est actif
     if show_timing:
         print("\n" + "=" * 56)
         print(" ⏱️  RAPPORT DE PERFORMANCE DÉTAILLÉ (goodfood-archiver)")
@@ -148,6 +169,8 @@ def main() -> int:
     parser.add_argument("--parallel", type=int, default=3, help="Nombre d'impressions parallèles (défaut: 3)")
     parser.add_argument("--refresh", action="store_true", help="Forcer le rafraîchissement du cache d'historique")
     parser.add_argument("--timing", action="store_true", help="Afficher les métriques de vitesse détaillées")
+    parser.add_argument("--out", type=Path, help="Chemin du PDF final généré")
+    parser.add_argument("--dump", action="store_true", help="Sauvegarder le dump HTML pour diagnostic")
     parser.add_argument("--headed", action="store_true", help="Lancer Chromium avec interface visible")
 
     args = parser.parse_args()
@@ -160,14 +183,13 @@ def main() -> int:
                 refresh=args.refresh,
                 show_timing=args.timing,
                 headless=not args.headed,
+                out_path=args.out,
+                dump=args.dump,
             )
         )
     except KeyboardInterrupt:
         print("\n⏹️  Interrompu.")
         return 130
-    except Exception as e:
-        print(f"\n❌ Erreur fatale : {e}", file=sys.stderr)
-        return 1
 
 
 if __name__ == "__main__":

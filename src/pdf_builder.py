@@ -1,11 +1,11 @@
 """Phase B : Rendu 100 % Anonyme et Génération Parallèle des PDF Officiels Goodfood.
 
 Optimisations P0/P1/P3/P5 :
-- Parallélisation asynchrone native via asyncio.gather et asyncio.Semaphore (P1).
-- Zéro sommeil aveugle : wait_until="domcontentloaded" + promesse de décodage d'images (plafond dur 3 s) (P0/P3).
+- Parallélisation asynchrone native via asyncio.gather et asyncio.Semaphore.
+- Noms de fichiers nettoyés en ASCII pur (slugify_ascii) sans caractères accentués fragiles.
+- Attente d'images HD plafonnée à 2,5s non bloquante.
 - Contexte anonyme partagé (zéro fuite de session vers www2).
-- Cache disque des fiches déjà générées (> 30 Ko) (P5).
-- Tolérance aux pannes avec réessais et back-off exponentiel avec jitter.
+- Cache disque des fiches déjà générées (> 30 Ko).
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from pypdf import PdfReader, PdfWriter
 
 from .guardrails import apply_guardrails_async
 from .utils import (
-    CHROMIUM_PERF_ARGS, DATA_DIR, RECIPES_DIR, ensure_dirs, load_config,
+    CHROMIUM_PERF_ARGS, DATA_DIR, RECIPES_DIR, ensure_dirs, load_config, slugify_ascii,
 )
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ async def print_card_page_async(
             page = await context.new_page()
             await page.goto(card_url, wait_until="domcontentloaded", timeout=20000)
 
-            # Déclenchement rapide du scroll et décodage de toutes les images HD (max 3s)
+            # Déclenchement rapide du scroll et décodage de toutes les images HD (max 2.5s)
             js_script = """
             async () => {
                 window.scrollTo(0, document.body.scrollHeight);
@@ -60,7 +60,7 @@ async def print_card_page_async(
                     return new Promise(resolve => {
                         img.onload = resolve;
                         img.onerror = resolve;
-                        setTimeout(resolve, 2500);
+                        setTimeout(resolve, 2200);
                     });
                 }));
             }
@@ -106,7 +106,7 @@ async def print_card_page_async(
                     await page.close()
                 except Exception:
                     pass
-            delay = (2 ** attempt) + random.uniform(0.1, 0.5)
+            delay = (2 ** attempt) + random.uniform(0.1, 0.4)
             if attempt == max_retries:
                 temp_path.unlink(missing_ok=True)
                 raise RuntimeError(f"Échec d'impression pour {card_url} ({e})") from e
@@ -121,23 +121,22 @@ async def _worker(
     recipe: dict,
     index: int,
     total: int,
-    results: list[Path],
+    results_dict: dict[int, Path],
     timings: dict[str, float],
 ) -> None:
-    """Tâche concurrente pour une fiche recette."""
+    """Tâche concurrente pour une fiche recette avec insertion ordonnée."""
     card_url = recipe.get("card_url") or recipe.get("url")
     if not card_url:
         return
 
     slug = recipe.get("matched_meal") or recipe.get("title") or f"recette_{index}"
-    fname = "".join(c for c in slug if c.isalnum() or c in " -_").strip().replace(" ", "_")[:60]
-    fname = fname or f"recette_{index}"
+    fname = slugify_ascii(slug)
     out_path = RECIPES_DIR / f"{fname}.pdf"
 
     # Cache hit : fichier déjà valide
     if out_path.exists() and out_path.stat().st_size > 30000:
         print(f"⚡ [CACHE] Fiche déjà archivée : {out_path.name} ({out_path.stat().st_size // 1024} Ko)")
-        results.append(out_path)
+        results_dict[index] = out_path
         return
 
     async with sem:
@@ -147,7 +146,7 @@ async def _worker(
         dt = time.perf_counter() - t0
         timings[slug] = dt
         print(f"    ✅ PDF officiel généré en {dt:.1f}s : {out_path.name} ({out_path.stat().st_size // 1024} Ko)")
-        results.append(out_path)
+        results_dict[index] = out_path
 
 
 async def build_recipes_async(
@@ -161,7 +160,6 @@ async def build_recipes_async(
     if not target_recipes:
         return [], {}
 
-    # Contexte anonyme vierge (zéro cookies, garde-fous stricts)
     anon_context = await browser.new_context(
         viewport={"width": 1440, "height": 900},
         user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -169,32 +167,25 @@ async def build_recipes_async(
     await apply_guardrails_async(anon_context)
 
     sem = asyncio.Semaphore(parallel)
-    results: list[Path] = []
+    results_dict: dict[int, Path] = {}
     timings: dict[str, float] = {}
 
     try:
         tasks = [
-            _worker(sem, anon_context, r, i, len(target_recipes), results, timings)
+            _worker(sem, anon_context, r, i, len(target_recipes), results_dict, timings)
             for i, r in enumerate(target_recipes, 1)
         ]
         await asyncio.gather(*tasks)
     finally:
         await anon_context.close()
 
-    # Conserver l'ordre original des recettes
-    ordered_results = []
-    for r in target_recipes:
-        slug = r.get("matched_meal") or r.get("title") or ""
-        fname = "".join(c for c in slug if c.isalnum() or c in " -_").strip().replace(" ", "_")[:60]
-        expected_path = RECIPES_DIR / f"{fname}.pdf"
-        if expected_path in results:
-            ordered_results.append(expected_path)
-
-    return ordered_results or results, timings
+    # Reconstitution ordonnée de la liste
+    ordered_results = [results_dict[i] for i in sorted(results_dict.keys())]
+    return ordered_results, timings
 
 
 def build_single_sku(sku: str, lang: str = "fr", out_dir: Optional[Path] = None, headless: bool = True) -> Path:
-    """Téléchargement direct synchrone d'un SKU unique (5s)."""
+    """Téléchargement direct synchrone d'un SKU unique (3s)."""
     from playwright.sync_api import sync_playwright
     cfg = load_config()
     out_dir = out_dir or RECIPES_DIR
@@ -224,7 +215,7 @@ def build_single_sku(sku: str, lang: str = "fr", out_dir: Optional[Path] = None,
                 return new Promise(resolve => {
                     img.onload = resolve;
                     img.onerror = resolve;
-                    setTimeout(resolve, 2500);
+                    setTimeout(resolve, 2200);
                 });
             }));
         }''')

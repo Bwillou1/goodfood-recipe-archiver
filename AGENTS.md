@@ -9,13 +9,11 @@ Extraire les fiches recettes Goodfood commandées par l'utilisateur et compiler 
 
 ---
 
-## ⚡ Exécution en 3 Lignes de Commande (Rapide & Direct)
+## ⚡ Exécution en 2 Lignes de Commande (Rapide, Bulletproof & Sans OOM)
 
 ```bash
-# 1. Installation des dépendances et de Chromium (avec dépendances Linux)
-pip install -r requirements.txt
-playwright install-deps chromium 2>/dev/null || true
-playwright install chromium
+# 1. Bootstrap de l'environnement (installe venv, dépendances et Chromium léger sans OOM)
+bash scripts/bootstrap.sh
 
 # 2. Configuration des identifiants dans .env (fournis par l'utilisateur)
 cat << 'ENV' > .env
@@ -23,7 +21,7 @@ GOODFOOD_EMAIL=...
 GOODFOOD_PASSWORD=...
 ENV
 
-# 3. Lancement direct du pipeline complet (exécute en < 15 secondes)
+# 3. Lancement direct du pipeline complet (< 10 secondes)
 python run.py --timing --parallel 3
 ```
 
@@ -37,4 +35,4 @@ Rends le fichier PDF final généré : `data/output/Goodfood_recettes.pdf` en pi
 ## 🛡️ Architecture & Sécurité Zero-Trust
 1. **Phase A (Authentifiée courte)** : Récupération des SKU sur `/fr-CA/recipe-cards` (1 seule fois, mis en cache).
 2. **Phase B (100% Anonyme & Parallèle)** : Téléchargement direct des cartons sur `www2.makegoodfood.ca` sans aucune transmission de cookies ni tokens.
-3. **Phase C (Assemblage)** : Fusion en PDF Paysage A4 avec table des matières.
+3. **Phase C (Assemblage)** : Fusion en PDF Paysage A4 avec table des matières et métadonnées.

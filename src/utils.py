@@ -1,7 +1,8 @@
-"""Utilitaires partagés : configuration, chemins, normalisation et constantes de performance."""
+"""Utilitaires partagés : configuration, chemins, normalisation et détection d'environnement."""
 from __future__ import annotations
 
 import os
+import re
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -17,21 +18,46 @@ OUTPUT_DIR = DATA_DIR / "output"
 CACHE_DIR = DATA_DIR / "cache"
 COOKIES_DIR = ROOT / "cookies"
 
-# Arguments Chromium optimisés pour démarrage rapide, conteneurs Docker et Sandboxes Linux
-CHROMIUM_PERF_ARGS = [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-background-networking",
-    "--disable-component-update",
-    "--no-first-run",
-    "--mute-audio",
-    "--disable-gpu",
-    "--disable-extensions",
-]
-
 # Chargement des variables d'environnement une seule fois
 load_dotenv(ROOT / ".env")
+
+
+def is_container_or_root() -> bool:
+    """Détecte si le code tourne en conteneur Docker/Kubernetes/LXC ou en tant que root."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return True
+    if os.getenv("GOODFOOD_NO_SANDBOX", "").strip() in ("1", "true", "True"):
+        return True
+    if Path("/.dockerenv").exists():
+        return True
+    cgroup = Path("/proc/1/cgroup")
+    if cgroup.exists():
+        try:
+            content = cgroup.read_text(encoding="utf-8", errors="ignore")
+            if any(k in content for k in ("docker", "kubepods", "containerd", "lxc")):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def chromium_launch_args() -> list[str]:
+    """Retourne la liste des arguments de lancement Chromium adaptés à l'environnement."""
+    args = [
+        "--disable-dev-shm-usage",
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--no-first-run",
+        "--mute-audio",
+        "--disable-gpu",
+        "--disable-extensions",
+    ]
+    if is_container_or_root():
+        args = ["--no-sandbox", "--disable-setuid-sandbox"] + args
+    return args
+
+
+CHROMIUM_PERF_ARGS = chromium_launch_args()
 
 
 def load_config() -> dict[str, Any]:
@@ -73,6 +99,17 @@ def normalize(text: str) -> str:
     text = text.lower()
     text = "".join(c for c in text if c.isalnum() or c.isspace())
     return " ".join(text.split())
+
+
+def slugify_ascii(text: str) -> str:
+    """Transforme un titre en slug ASCII pur pour les noms de fichiers (sans accents, sans cédille)."""
+    if not text:
+        return "recette"
+    text = text.replace("œ", "oe").replace("Œ", "oe").replace("æ", "ae").replace("Æ", "ae")
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = re.sub(r"[^\w\s-]", "", text).strip().replace(" ", "_")
+    return text[:60] or "recette"
 
 
 def sanitize_latin1(text: str) -> str:

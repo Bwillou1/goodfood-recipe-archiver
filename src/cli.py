@@ -14,9 +14,24 @@ Usage :
 from __future__ import annotations
 
 import argparse
+import asyncio
+import importlib.util
+from pathlib import Path
 import sys
 
 from . import assembler, auth, finder, ocr_receipt, pdf_builder
+from .utils import ROOT
+
+
+def _get_run_pipeline_async():
+    """Charge run_pipeline_async de façon robuste depuis run.py à la racine."""
+    run_file = ROOT / "run.py"
+    spec = importlib.util.spec_from_file_location("run_module", run_file)
+    if spec and spec.loader:
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return getattr(mod, "run_pipeline_async")
+    raise ImportError("Impossible de charger run_pipeline_async depuis run.py")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     p_sku.add_argument("sku", help="Identifiant Goodfood (ex: GF105044)")
     p_sku.add_argument("--lang", default="fr", choices=["fr", "en"], help="Langue de la fiche")
 
-    sub.add_parser("assemble", help="Phase C : Assembler en PDF final avec table des matières")
+    p_asm = sub.add_parser("assemble", help="Phase C : Assembler en PDF final avec table des matières")
+    p_asm.add_argument("--out", type=Path, help="Chemin du PDF de sortie")
 
     p_all = sub.add_parser("all", help="Pipeline complet (Phase A + Phase B + Phase C)")
     p_all.add_argument("--image", help="Capture d'écran de la facture")
@@ -56,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     p_all.add_argument("--parallel", type=int, default=3, help="Nombre de tâches parallèles")
     p_all.add_argument("--refresh", action="store_true", help="Forcer rafraîchissement cache")
     p_all.add_argument("--timing", action="store_true", help="Afficher chronométrage détaillé")
+    p_all.add_argument("--out", type=Path, help="Chemin du PDF de sortie")
+    p_all.add_argument("--dump", action="store_true", help="Sauvegarder le dump HTML")
     p_all.add_argument("--headed", action="store_true", help="Afficher le navigateur")
 
     sub.add_parser("demo", help="Générer un PDF d'exemple (sans compte)")
@@ -77,18 +95,19 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "sku":
             pdf_builder.build_single_sku(args.sku, lang=args.lang)
         elif args.cmd == "assemble":
-            assembler.run()
+            assembler.run(out_path=args.out)
         elif args.cmd == "all":
-            from run import run_pipeline_async
-            import asyncio
+            run_func = _get_run_pipeline_async()
             meals_param = args.meals or (" | ".join(args.list) if args.list else None)
             return asyncio.run(
-                run_pipeline_async(
+                run_func(
                     meals_arg=meals_param,
                     parallel=args.parallel,
                     refresh=args.refresh,
                     show_timing=args.timing,
                     headless=not args.headed,
+                    out_path=args.out,
+                    dump=args.dump,
                 )
             )
         elif args.cmd == "demo":

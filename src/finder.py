@@ -1,10 +1,11 @@
 """Phase A : Découverte et Indexation Authentifiée des Fiches Recettes Goodfood.
 
-Optimisations Haute Performance (P0 / P3 / P5) :
-- Court-circuit P5 : Réutilisation du cache `ordered_cards.json` (< 24h) si tous les plats matchent (0.0s réseau).
-- Attentes ciblées Playwright natives (P0/P3) sans aucun sleep fixe.
-- Défilement intelligent stabilisé pour capturer l'ensemble des fiches sans temps mort.
-- Rapprochement flou rapide (rapidfuzz) avec journalisation systématique des scores.
+Optimisations P0 / P1 / P3 / P5 :
+- Unification de best_match : retourne systématiquement tuple[dict, float] | None.
+- Court-circuit P5 : Réutilisation du cache `ordered_cards.json` (< 24h) si tous les plats matchent.
+- Attentes ciblées Playwright natives (aucun sleep aveugle).
+- Diagnostic --dump : sauvegarde data/cache/page_dump.html (500 Ko).
+- Architecture 100 % asynchrone sans mélange sync/async.
 """
 from __future__ import annotations
 
@@ -38,6 +39,8 @@ def load_meals() -> list[str]:
 
 def extract_sku(url: str) -> Optional[str]:
     """Extrait le SKU Goodfood (GF + 6 chiffres) depuis une URL."""
+    if not url:
+        return None
     m = re.search(r"(GF\d{6}|\b\d{5,7}\b)", url, re.IGNORECASE)
     if m:
         return m.group(1).upper()
@@ -48,21 +51,23 @@ def best_match(
     query: str,
     candidates: list[Union[dict, tuple[str, str], list[str]]],
     threshold: float = 0.60,
-) -> Optional[Any]:
-    """Retourne la meilleure fiche recette correspondante (supporte dicts ou tuples)."""
+) -> Optional[tuple[dict, float]]:
+    """Retourne la meilleure fiche recette correspondante (format de retour unifié dict + score)."""
     q = normalize(query)
-    best_candidate: Any = None
+    best_candidate_dict: Optional[dict] = None
     best_score: float = 0.0
-    is_tuple_format = False
 
     for cand in candidates:
         if isinstance(cand, (tuple, list)):
-            is_tuple_format = True
             title = cand[0]
+            url = cand[1] if len(cand) > 1 else ""
+            c_dict = {"title": title, "card_url": url, "sku": extract_sku(url) or ""}
         elif isinstance(cand, dict):
+            c_dict = cand
             title = cand.get("title", "")
         else:
             title = str(cand)
+            c_dict = {"title": title, "card_url": "", "sku": ""}
 
         norm_title = normalize(title)
         ratio = fuzz.ratio(q, norm_title) / 100.0
@@ -72,12 +77,10 @@ def best_match(
 
         if score > best_score:
             best_score = score
-            best_candidate = cand
+            best_candidate_dict = c_dict
 
-    if best_candidate and best_score >= threshold:
-        if is_tuple_format and isinstance(best_candidate, (tuple, list)):
-            return (best_candidate[0], best_candidate[1] if len(best_candidate) > 1 else "", best_score)
-        return (best_candidate, best_score)
+    if best_candidate_dict and best_score >= threshold:
+        return (best_candidate_dict, best_score)
     return None
 
 
@@ -98,7 +101,7 @@ def get_cached_ordered_cards(ttl_hours: float = 24.0) -> Optional[list[dict]]:
     return None
 
 
-async def collect_ordered_cards_async(page, url: str) -> list[dict]:
+async def collect_ordered_cards_async(page, url: str, dump: bool = False) -> list[dict]:
     """Extrait l'ensemble des fiches commandées sur /fr-CA/recipe-cards de façon asynchrone."""
     cfg = load_config()
     politeness = cfg.get("rate_limit", {}).get("delay_seconds", 0.3)
@@ -116,7 +119,17 @@ async def collect_ordered_cards_async(page, url: str) -> list[dict]:
     except Exception:
         return []
 
-    # 2. Défilement asynchrone stabilisé
+    # 2. Dump HTML de diagnostic si demandé
+    if dump:
+        try:
+            dump_path = CACHE_DIR / "page_dump.html"
+            content = await page.content()
+            dump_path.write_text(content[:500000], encoding="utf-8")
+            print(f"📄 Dump HTML sauvegardé dans {dump_path}")
+        except Exception:
+            pass
+
+    # 3. Défilement asynchrone stabilisé
     previous_count = -1
     for _ in range(15):
         current_count = await page.locator("a[href*='www2.makegoodfood.ca/recipe-card/']").count()
@@ -126,7 +139,7 @@ async def collect_ordered_cards_async(page, url: str) -> list[dict]:
         await page.mouse.wheel(0, 5000)
         await asyncio.sleep(politeness)
 
-    # 3. Extraction structurée par ancrage JavaScript
+    # 4. Extraction structurée par ancrage JavaScript
     js_extractor = """
     () => {
         const results = [];
@@ -181,6 +194,7 @@ async def find_recipes_async(
     context: AsyncContext,
     meals: Optional[list[str]] = None,
     refresh: bool = False,
+    dump: bool = False,
 ) -> tuple[list[dict], list[str]]:
     """Phase A Asynchrone : indexation et rapprochement flou avec court-circuit cache."""
     ensure_dirs()
@@ -195,7 +209,6 @@ async def find_recipes_async(
     if not refresh:
         cached = get_cached_ordered_cards(ttl_hours=cache_ttl)
         if cached:
-            # Vérifier si tous les plats matchent dans le cache
             all_matched = True
             for m in target_meals:
                 if best_match(m, cached, threshold=threshold) is None:
@@ -212,7 +225,7 @@ async def find_recipes_async(
             recipe_cards_url = cfg.get("goodfood", {}).get(
                 "recipe_cards_url", "https://www.makegoodfood.ca/fr-CA/recipe-cards"
             )
-            ordered_cards = await collect_ordered_cards_async(page, recipe_cards_url)
+            ordered_cards = await collect_ordered_cards_async(page, recipe_cards_url, dump=dump)
             print(f"📚 {len(ordered_cards)} fiches recettes officielles indexées.")
             ORDERED_CARDS_CACHE.write_text(
                 json.dumps(ordered_cards, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -232,9 +245,9 @@ async def find_recipes_async(
             continue
 
         candidate, score = match_res
-        title = candidate["title"] if isinstance(candidate, dict) else candidate[0]
-        sku = candidate.get("sku", "") if isinstance(candidate, dict) else extract_sku(candidate[1]) or ""
-        card_url = candidate.get("card_url", "") if isinstance(candidate, dict) else candidate[1]
+        title = candidate.get("title", "")
+        sku = candidate.get("sku", "")
+        card_url = candidate.get("card_url", "")
 
         alert = " (⚠️ Rapprochement modéré)" if score < strict_threshold else ""
         print(f"   ✅ Trouvé [Score: {score:.2f}]{alert} : {title}")
@@ -248,6 +261,12 @@ async def find_recipes_async(
             "score": score,
         })
 
+    # Si 0 recette matchée, afficher les 10 premières fiches indexées pour debug
+    if not recipes and ordered_cards:
+        print("\n🔍 Diagnostic : 10 premières fiches trouvées dans l'historique Goodfood :")
+        for i, c in enumerate(ordered_cards[:10], 1):
+            print(f"   {i}. {c.get('title', '')} (SKU: {c.get('sku', '')})")
+
     RECIPES_PATH.write_text(
         json.dumps({"recipes": recipes, "missing": missing}, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -255,61 +274,21 @@ async def find_recipes_async(
     return recipes, missing
 
 
-# --- Wrapper Synchrone ---
+# --- Point d'Entrée Synchrone (délégation propre via asyncio) ---
 
 def run(dump: bool = False, headless: bool = True, refresh: bool = False) -> Path:
-    """Point d'entrée synchrone pour compatibilité."""
-    from .auth import ensure_session
-    ensure_dirs()
-    cfg = load_config()
-    meals = load_meals()
-    threshold = cfg.get("matching", {}).get("threshold", 0.60)
-    cache_ttl = cfg.get("performance", {}).get("cache_ttl_hours", 24)
+    """Exécute la Phase A via le moteur asynchrone unifié."""
+    from playwright.async_api import async_playwright
+    from .auth import ensure_session_async
+    from .utils import CHROMIUM_PERF_ARGS
 
-    # Court-circuit cache
-    if not refresh:
-        cached = get_cached_ordered_cards(ttl_hours=cache_ttl)
-        if cached:
-            all_matched = all(best_match(m, cached, threshold=threshold) is not None for m in meals)
-            if all_matched:
-                print(f"⚡ [CACHE] {len(cached)} fiches réutilisées depuis le cache.")
-                recipes = []
-                missing = []
-                for m in meals:
-                    res = best_match(m, cached, threshold=threshold)
-                    if res:
-                        c, s = res
-                        recipes.append({
-                            "title": c["title"], "card_url": c["card_url"],
-                            "sku": c["sku"], "matched_meal": m, "score": s
-                        })
-                    else:
-                        missing.append(m)
-                RECIPES_PATH.write_text(json.dumps({"recipes": recipes, "missing": missing}, ensure_ascii=False, indent=2), encoding="utf-8")
-                return RECIPES_PATH
+    async def _runner():
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=headless, args=CHROMIUM_PERF_ARGS)
+            _, auth_ctx = await ensure_session_async(browser=browser, headless=headless)
+            await find_recipes_async(context=auth_ctx, refresh=refresh, dump=dump)
+            await auth_ctx.close()
+            await browser.close()
 
-    pw, context = ensure_session(headless=headless)
-    page = context.new_page()
-    try:
-        url = cfg.get("goodfood", {}).get("recipe_cards_url", "https://www.makegoodfood.ca/fr-CA/recipe-cards")
-        page.goto(url, wait_until="domcontentloaded")
-        page.wait_for_selector("a[href*='www2.makegoodfood.ca/recipe-card/']", timeout=15000)
-        ordered_cards = asyncio.run(collect_ordered_cards_async(page, url))
-        ORDERED_CARDS_CACHE.write_text(json.dumps(ordered_cards, ensure_ascii=False, indent=2), encoding="utf-8")
-        recipes = []
-        missing = []
-        for m in meals:
-            match_res = best_match(m, ordered_cards, threshold=threshold)
-            if match_res:
-                c, s = match_res
-                title = c["title"] if isinstance(c, dict) else c[0]
-                url_c = c["card_url"] if isinstance(c, dict) else c[1]
-                sku_c = c.get("sku", "") if isinstance(c, dict) else extract_sku(url_c) or ""
-                recipes.append({"title": title, "card_url": url_c, "sku": sku_c, "matched_meal": m, "score": s})
-            else:
-                missing.append(m)
-        RECIPES_PATH.write_text(json.dumps({"recipes": recipes, "missing": missing}, ensure_ascii=False, indent=2), encoding="utf-8")
-    finally:
-        context.close()
-        pw.stop()
+    asyncio.run(_runner())
     return RECIPES_PATH

@@ -54,3 +54,18 @@ Ce document consigne les optimisations d'ingénierie et les mesures avant/après
 ### P7 — Hygiène du Code
 - Suppression de la dépendance inutilisée `requests` dans `requirements.txt`.
 - Chargement paresseux des dépendances lourdes (OCR / Tesseract).
+
+---
+
+## 🧪 3. Rapport d'Exécution Réelle en Sandbox Linux (2026-08-20)
+
+- **Cible** : Commande #32697289 (3 plats, compte réel Goodfood).
+- **Mesures réelles** :
+  - Phase A (Indexation 59 fiches & matching) : **5.84 s**
+  - Phase B (Rendu PDF // 3 fiches) : **1.79 s** (1.4s à 1.8s par fiche)
+  - Phase C (Assemblage PDF final 7 pages) : **0.02 s**
+  - **Wall-Clock total** : **7.89 s**
+- **Améliorations Sandbox & Bulletproofing** :
+  - Script `scripts/bootstrap.sh` : installation ciblée des dépendances système légères Debian/Ubuntu sans polices CJK géantes (élimine l'OOM 137).
+  - Détection automatique de conteneurs (`is_container_or_root`) pour appliquer `--no-sandbox` uniquement quand nécessaire.
+  - Neutralisation silencieuse des traceurs et alertes sans bruit (`🛑 [SÉCURITÉ BLOQUÉE]` réservé aux véritables mutations et navigations sensibles).
