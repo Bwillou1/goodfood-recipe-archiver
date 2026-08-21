@@ -21,20 +21,22 @@ class TestGuardrails(unittest.TestCase):
             self.assertTrue(is_url_allowed(u), f"URL sûre faussement bloquée : {u}")
 
     def test_benign_get_endpoints_allowed(self):
-        """Vérifie que les endpoints de lecture bénins (ratings, promotion) sont autorisés en GET."""
+        """Vérifie que les endpoints de lecture bénins et API interne GET sont autorisés pour hydrater Next.js."""
         benign_urls = [
             "https://api.makegoodfood.ca/v2/ratings?userId=8a7e596a-aa30-4164-a4b1-533605f687ef&locale=fr",
             "https://api.makegoodfood.ca/user/8a7e596a-aa30-4164-a4b1-533605f687ef/promotion",
+            "https://api.makegoodfood.ca/cart/62271042",
+            "https://api.makegoodfood.ca/user/8a7e596a-aa30-4164-a4b1-533605f687ef/subscription/last-cancelled",
             "https://www.makegoodfood.ca/promotion",
         ]
         for u in benign_urls:
-            self.assertTrue(is_url_allowed(u, method="GET"), f"GET bénin non autorisé : {u}")
+            self.assertTrue(is_url_allowed(u, resource_type="xhr", method="GET"), f"GET bénin non autorisé : {u}")
             allowed, should_log, reason = _check_route(u, "GET", "xhr")
             self.assertTrue(allowed, f"Route non permise : {u}")
             self.assertFalse(should_log, "Ne doit pas logger en alerte")
 
     def test_forbidden_cart_and_payment_urls(self):
-        dangerous_urls = [
+        dangerous_document_urls = [
             "https://www.makegoodfood.ca/checkout",
             "https://www.makegoodfood.ca/fr-CA/checkout",
             "https://www.makegoodfood.ca/cart",
@@ -44,13 +46,12 @@ class TestGuardrails(unittest.TestCase):
             "https://www.makegoodfood.ca/credit-card",
             "https://www.makegoodfood.ca/wallet",
             "https://www.makegoodfood.ca/portefeuille",
-            "https://api.makegoodfood.ca/cart/62271042",
         ]
-        for u in dangerous_urls:
-            self.assertFalse(is_url_allowed(u), f"URL de paiement/panier non bloquée : {u}")
+        for u in dangerous_document_urls:
+            self.assertFalse(is_url_allowed(u, resource_type="document"), f"URL de paiement/panier non bloquée : {u}")
 
     def test_forbidden_subscription_and_skip_urls(self):
-        dangerous_urls = [
+        dangerous_document_urls = [
             "https://www.makegoodfood.ca/subscription",
             "https://www.makegoodfood.ca/abonnement",
             "https://www.makegoodfood.ca/skip",
@@ -62,11 +63,9 @@ class TestGuardrails(unittest.TestCase):
             "https://www.makegoodfood.ca/subscriptions/modify",
             "https://www.makegoodfood.ca/subscriptions/cancel",
             "https://www.makegoodfood.ca/orders/cancel",
-            "https://api.makegoodfood.ca/user/8a7e596a-aa30-4164-a4b1-533605f687ef/subscription/last-cancelled",
-            "https://api.makegoodfood.ca/subscription/92378930-37eb-4811-a57e-25654b0316b9",
         ]
-        for u in dangerous_urls:
-            self.assertFalse(is_url_allowed(u), f"URL d'abonnement/skip non bloquée : {u}")
+        for u in dangerous_document_urls:
+            self.assertFalse(is_url_allowed(u, resource_type="document"), f"URL d'abonnement/skip non bloquée : {u}")
 
     def test_http_mutation_blocking(self):
         self.assertTrue(is_mutation_allowed("GET", "https://www.makegoodfood.ca/fr-CA/recipes"))
@@ -79,6 +78,7 @@ class TestGuardrails(unittest.TestCase):
         self.assertFalse(is_mutation_allowed("DELETE", "https://www.makegoodfood.ca/api/subscription"))
         self.assertFalse(is_mutation_allowed("PATCH", "https://www.makegoodfood.ca/api/cart"))
         self.assertFalse(is_mutation_allowed("POST", "https://api.makegoodfood.ca/v2/ratings"))
+        self.assertFalse(is_mutation_allowed("POST", "https://api.makegoodfood.ca/cart/62271042"))
 
     def test_session_trackers_and_rum_blocked_silently(self):
         trackers = [

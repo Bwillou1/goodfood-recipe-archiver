@@ -3,7 +3,7 @@
 Architecture de Sécurité & Filtrage Silencieux :
 - Protection hermétique en lecture seule (Strict Read-Only).
 - Blocage strict des documents et actions sensibles (Panier, Checkout, Abonnements, Facturation).
-- Autorisation des endpoints de lecture bénins (GET /promotion, GET v2/ratings).
+- Autorisation des requêtes API GET de lecture nécessaires à l'hydratation Next.js (sans effet de bord).
 - Neutralisation silencieuse des traceurs (Cloudflare RUM, New Relic, TikTok, Google Analytics, Hotjar, etc.).
 - Journalisation ciblée : alerte uniquement sur navigation document sensible ou mutation HTTP.
 """
@@ -77,11 +77,6 @@ FORBIDDEN_URL_PATTERNS = [
     r"/api/.*/payment",
     r"/api/.*/order/cancel",
     r"/api/.*/order/edit",
-    r"/api/.*/cart",
-    r"/api/.*/wallet",
-    r"/api/.*/subscription",
-    r"/api/.*/skip",
-    r"/api/.*/unskip",
 ]
 
 # Endpoints autorisés en lecture GET uniquement (ex: consultation de promotions ou ratings)
@@ -169,6 +164,7 @@ def is_url_allowed(url: str, resource_type: str = "other", method: str = "GET") 
         
     parsed = urlparse(url)
     path = parsed.path.lower()
+    host = parsed.netloc.lower()
 
     # 1. Traceurs systématiquement bloqués
     if is_tracker(url):
@@ -178,15 +174,19 @@ def is_url_allowed(url: str, resource_type: str = "other", method: str = "GET") 
     if is_static_asset(path):
         return True
 
-    # 3. Endpoints GET autorisés (promotion, ratings)
+    # 3. Lectures GET vers l'API interne Goodfood (strictement read-only pour hydrater la page)
+    if method == "GET" and host == "api.makegoodfood.ca" and resource_type != "document":
+        return True
+
+    # 4. Endpoints GET autorisés (promotion, ratings)
     if method == "GET" and BENIGN_GET_REGEX.search(path):
         return True
 
-    # 4. Blocage des navigations de document vers les pages sensibles
+    # 5. Blocage des navigations de document vers les pages sensibles
     if resource_type == "document" and FORBIDDEN_REGEX.search(path):
         return False
 
-    # 5. Blocage général des chemins sensibles
+    # 6. Blocage général des chemins sensibles
     if FORBIDDEN_REGEX.search(path):
         return False
         
@@ -217,6 +217,7 @@ def _check_route(url: str, method: str, resource_type: str) -> tuple[bool, bool,
     sensible ou les mutations HTTP non autorisées (zéro spam sur les GET XHR ou traceurs).
     """
     parsed = urlparse(url)
+    host = parsed.netloc.lower()
     
     # 1. Traceurs & RUM (avortés silencieusement)
     if is_tracker(url):
@@ -229,6 +230,11 @@ def _check_route(url: str, method: str, resource_type: str) -> tuple[bool, bool,
     # 3. Mutations HTTP non autorisées (log d'alerte)
     if not is_mutation_allowed(method, url):
         return False, True, f"mutation_{method}"
+
+    # 3bis. Lectures GET vers l'API interne Goodfood : strictement en lecture seule
+    # (l'interface Next.js a besoin de ces requêtes pour afficher l'en-tête sans crasher en 404)
+    if method == "GET" and host == "api.makegoodfood.ca" and resource_type != "document":
+        return True, False, "benign_api_get"
 
     # 4. Endpoints GET de lecture bénins (autorisés)
     if method == "GET" and BENIGN_GET_REGEX.search(parsed.path):

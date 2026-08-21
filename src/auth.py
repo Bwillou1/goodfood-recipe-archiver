@@ -186,6 +186,7 @@ async def login_with_credentials_async(
             # Sauvegarde UNIQUEMENT si validé
             await context.storage_state(path=str(state_path))
             print("✅ Connexion réussie, session sauvegardée.")
+            await asyncio.sleep(1.5)
             await page.close()
             return browser, context
 
