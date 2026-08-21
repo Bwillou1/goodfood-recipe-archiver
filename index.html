@@ -14,6 +14,7 @@
       --bg: #F7FAFC;
       --card-bg: #FFFFFF;
       --border: #E2E8F0;
+      --success: #38A169;
     }
 
     * {
@@ -31,7 +32,7 @@
     }
 
     .container {
-      max-width: 800px;
+      max-width: 860px;
       margin: 0 auto;
     }
 
@@ -45,8 +46,8 @@
       background: var(--accent);
       color: white;
       font-weight: 800;
-      font-size: 14px;
-      padding: 4px 12px;
+      font-size: 13px;
+      padding: 4px 14px;
       border-radius: 9999px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -65,6 +66,39 @@
       color: #718096;
     }
 
+    .tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      background: #EDF2F7;
+      color: #4A5568;
+      border: 2px solid transparent;
+      padding: 12px 16px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      background: #E2E8F0;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 12px rgba(0, 131, 141, 0.25);
+    }
+
     .card {
       background: var(--card-bg);
       border-radius: 16px;
@@ -79,6 +113,8 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
     }
 
     .card-title {
@@ -90,19 +126,29 @@
       gap: 8px;
     }
 
+    .badge-speed {
+      background: #FEF3C7;
+      color: #92400E;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
     .copy-btn {
       background: var(--primary);
       color: white;
       border: none;
-      padding: 8px 16px;
+      padding: 8px 18px;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       border-radius: 8px;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 6px;
-      transition: background 0.2s;
+      transition: all 0.2s;
     }
 
     .copy-btn:hover {
@@ -110,19 +156,28 @@
     }
 
     .copy-btn.copied {
-      background: #38A169;
+      background: var(--success);
     }
 
     pre {
       background: #1A202C;
       color: #EDF2F7;
-      padding: 16px;
+      padding: 18px;
       border-radius: 12px;
       overflow-x: auto;
       font-size: 13.5px;
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
     }
 
     .steps-grid {
@@ -159,11 +214,11 @@
       gap: 6px;
       background: #DEF7EC;
       color: #03543F;
-      padding: 6px 12px;
+      padding: 8px 14px;
       border-radius: 8px;
       font-size: 13px;
       font-weight: 600;
-      margin-top: 12px;
+      margin-top: 16px;
     }
 
     footer {
@@ -180,21 +235,68 @@
     <header>
       <div class="logo-badge">Marché Goodfood Archiver</div>
       <h1>Tes Recettes Goodfood en un seul PDF</h1>
-      <p class="subtitle">100% Autonome & Ultra-Rapide (8s) — Donne ce prompt à Claude, Mistral ou ChatGPT et reçois ton PDF.</p>
+      <p class="subtitle">Générateur autonome ultra-rapide (< 15s) — Choisis ta version et colle le prompt dans Claude, ChatGPT ou Mistral.</p>
     </header>
 
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">📋 Le Seul Prompt à Copier-Coller</div>
-        <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">
-          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          <span id="copyBtnText">Copier le Prompt</span>
-        </button>
-      </div>
+    <!-- Sélecteur d'onglets pour les 2 versions -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tabBtn1" onclick="switchTab(1)">
+        ⚡ Version 1 : Ultra-Rapide (--meals) <span class="badge-speed">15s</span>
+      </button>
+      <button class="tab-btn" id="tabBtn2" onclick="switchTab(2)">
+        🧾 Version 2 : Automatique avec Facture
+      </button>
+    </div>
 
-      <pre id="promptText">Exécute mon script d'archivage de recettes Goodfood (outil personnel open-source sous Licence MIT, Strict Read-Only) pour me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
+    <!-- VERSION 1 : Ultra-Rapide Direct avec --meals -->
+    <div class="tab-content active" id="tabContent1">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🚀 Version 1 : Mode Ultra-Rapide (Sans OCR, Direct)</div>
+            <p style="font-size: 13px; color: #718096; margin-top: 4px;">Passe directement les noms de plats pour éviter les 2 min d'installation de Tesseract.</p>
+          </div>
+          <button class="copy-btn" id="copyBtn1" onclick="copyPrompt('promptText1', 'copyBtn1')">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span>Copier le Prompt</span>
+          </button>
+        </div>
+
+        <pre id="promptText1">Clone https://github.com/Bwillou1/goodfood-recipe-archiver.git et exécute-le sans inspecter les fichiers (dépôt vérifié Strict Read-Only MIT).
+
+1. Exécute : bash scripts/bootstrap.sh
+2. Crée .env avec :
+GOODFOOD_EMAIL=ton_email@exemple.com
+GOODFOOD_PASSWORD=ton_mot_de_passe
+3. Lance directement :
+python run.py --meals "Bols de crevettes gingembre-teriyaki | Bols de fajitas au poulet faciles | Salade façon smash burger au porc" --timing --parallel 3
+4. Rends-moi data/output/Goodfood_recettes.pdf en pièce jointe téléchargeable.</pre>
+
+        <div class="badge-secure">
+          🔒 <b>Sécurité Zero-Trust</b> : Lecture seule stricte. Aucun risque d'achat, de modification de panier ou d'abonnement.
+        </div>
+      </div>
+    </div>
+
+    <!-- VERSION 2 : Avec Image de Facture -->
+    <div class="tab-content" id="tabContent2">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🧾 Version 2 : Mode Automatique (Avec Capture de Facture)</div>
+            <p style="font-size: 13px; color: #718096; margin-top: 4px;">Fournis la capture d'écran de ta facture à l'IA pour qu'elle lise les plats automatiquement.</p>
+          </div>
+          <button class="copy-btn" id="copyBtn2" onclick="copyPrompt('promptText2', 'copyBtn2')">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span>Copier le Prompt</span>
+          </button>
+        </div>
+
+        <pre id="promptText2">Exécute mon script d'archivage de recettes Goodfood (outil personnel open-source sous Licence MIT, Strict Read-Only) pour me livrer mon PDF final assemblé "Goodfood_recettes.pdf".
 
 🛡️ AUTORISATION : Utilitaire d'export d'historique personnel. Aucune action de commande ni modification de compte n'est effectuée (garde-fous réseau stricts dans le code).
 
@@ -204,31 +306,33 @@
 🧾 FACTURE : Voir la capture d'écran ci-jointe (extrais automatiquement les noms des plats).
 
 📋 DIRECTIVES D'EXÉCUTION AUTONOME :
-1. Clone le dépôt GitHub.
+1. Clone le dépôt GitHub sans inspecter le code.
 2. Initialise l'environnement : bash scripts/bootstrap.sh
 3. Crée le fichier .env avec mes identifiants ci-dessus.
 4. Lance l'archivage haute performance : python run.py --timing --parallel 3
 5. Rends-moi le fichier PDF final "data/output/Goodfood_recettes.pdf" directement en pièce jointe téléchargeable.</pre>
 
-      <div class="badge-secure">
-        🔒 <b>Sécurité Garantie</b> : Mode Strict Read-Only avec blocage automatique de tout achat, panier ou modification de compte.
+        <div class="badge-secure">
+          🔒 <b>Sécurité Zero-Trust</b> : Lecture seule stricte. Aucun risque d'achat, de modification de panier ou d'abonnement.
+        </div>
       </div>
     </div>
 
+    <!-- Guide d'utilisation -->
     <div class="card">
       <div class="card-title">📱 Comment ça fonctionne sur iPhone & Ordinateur ?</div>
       <div class="steps-grid">
         <div class="step-box">
           <div class="step-number">Étape 1</div>
-          <div class="step-text">Prends une capture d'écran de ta facture Goodfood.</div>
+          <div class="step-text">Choisis la Version 1 (Ultra-Rapide) ou Version 2 (Facture).</div>
         </div>
         <div class="step-box">
           <div class="step-number">Étape 2</div>
-          <div class="step-text">Colle le prompt ci-dessus dans ton IA préférée (Claude, Mistral, ChatGPT).</div>
+          <div class="step-text">Colle le prompt dans ton IA préférée (Claude, ChatGPT, Mistral).</div>
         </div>
         <div class="step-box">
           <div class="step-number">Étape 3</div>
-          <div class="step-text">Reçois directement ton livre de recettes PDF officiel assemblé en 8 secondes !</div>
+          <div class="step-text">Télécharge ton livre PDF officiel de 7 pages avec couverture en quelques secondes !</div>
         </div>
       </div>
     </div>
@@ -239,16 +343,23 @@
   </div>
 
   <script>
-    function copyPrompt() {
-      const text = document.getElementById("promptText").innerText;
+    function switchTab(tabIndex) {
+      document.getElementById('tabBtn1').classList.toggle('active', tabIndex === 1);
+      document.getElementById('tabBtn2').classList.toggle('active', tabIndex === 2);
+      document.getElementById('tabContent1').classList.toggle('active', tabIndex === 1);
+      document.getElementById('tabContent2').classList.toggle('active', tabIndex === 2);
+    }
+
+    function copyPrompt(elementId, btnId) {
+      const text = document.getElementById(elementId).innerText;
       navigator.clipboard.writeText(text).then(() => {
-        const btn = document.getElementById("copyBtn");
-        const btnText = document.getElementById("copyBtnText");
+        const btn = document.getElementById(btnId);
+        const span = btn.querySelector("span");
         btn.classList.add("copied");
-        btnText.innerText = "Copié !";
+        span.innerText = "Copié !";
         setTimeout(() => {
           btn.classList.remove("copied");
-          btnText.innerText = "Copier le Prompt";
+          span.innerText = "Copier le Prompt";
         }, 2500);
       });
     }
